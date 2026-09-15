@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   assertClientBuildEnvironment,
   clientBuildEnvironmentDefines,
+  clientBuildEnvironmentForProfile,
   clientBuildProcessEnvironment,
   officialClientBuildEnvironment,
   readClientBuildRecord,
@@ -95,7 +96,7 @@ describe('client build environment', () => {
     }).toThrow(/DSH_CLIENT_UNDECLARED/)
   })
 
-  it('inherits public values by default and isolates an explicit official profile', () => {
+  it('inherits public values by default and isolates explicit client profiles', () => {
     const parent = {
       PATH: '/bin',
       DSH_BUILD_CLIENT_PROFILE: 'official',
@@ -125,18 +126,17 @@ describe('client build environment', () => {
         DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
       })
     }).toThrow(/DSH_CLIENT_VERSION/)
-    expect(() => { resolveClientBuildEnvironment({}, 'unknown') }).toThrow(/unknown client build profile/)
-    expect(clientBuildProcessEnvironment(parent, {
-      DSH_CLIENT_BUILD_PROFILE: 'official',
+    expect(() => { resolveClientBuildEnvironment({ DSH_BUILD_CLIENT_PROFILE: 'unknown' }) }).toThrow(/unknown client build profile/)
+    const thunderuniEnvironment = {
+      DSH_CLIENT_BUILD_PROFILE: 'thunderuni',
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
-      DSH_CLIENT_TITLE: 'DeepSeek Harness',
+      DSH_CLIENT_TITLE: 'ThunderUni',
       DSH_CLIENT_VERSION: '1.2.3',
-    })).toEqual({
+    }
+    expect(resolveClientBuildEnvironment(parent, 'thunderuni')).toEqual(thunderuniEnvironment)
+    expect(clientBuildProcessEnvironment(parent, thunderuniEnvironment)).toEqual({
       PATH: '/bin',
-      DSH_CLIENT_BUILD_PROFILE: 'official',
-      DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
-      DSH_CLIENT_TITLE: 'DeepSeek Harness',
-      DSH_CLIENT_VERSION: '1.2.3',
+      ...thunderuniEnvironment,
     })
     expect(repositoryCommitHash('/unused', { DSH_CLIENT_COMMIT_HASH: COMMIT_HASH })).toBe(COMMIT_HASH.slice(0, 7))
   })
@@ -161,6 +161,12 @@ describe('client build environment', () => {
       DSH_CLIENT_BUILD_PROFILE: 'official',
       DSH_CLIENT_COMMIT_HASH: commit,
       DSH_CLIENT_TITLE: 'DeepSeek Harness',
+      DSH_CLIENT_VERSION: '1.2.3-rc.4',
+    })
+    expect(clientBuildEnvironmentForProfile(fixtureRoot, 'thunderuni')).toEqual({
+      DSH_CLIENT_BUILD_PROFILE: 'thunderuni',
+      DSH_CLIENT_COMMIT_HASH: commit,
+      DSH_CLIENT_TITLE: 'ThunderUni',
       DSH_CLIENT_VERSION: '1.2.3-rc.4',
     })
 

@@ -11,6 +11,10 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { pnpmInvocation } from '../pnpm-invocation.ts'
+import {
+  parseClientBuildProfile,
+  type ClientBuildProfile,
+} from '../client-build-environment.ts'
 import { releaseFamily, tarballName, type ReleaseFamily, type ReleaseMember } from './families.ts'
 import { isEntry, runConcurrent } from './process.ts'
 import { PUBLISH_ORDER_FILE, tarballFiles } from './tarball.ts'
@@ -49,20 +53,51 @@ function parseConcurrency(raw: string | undefined): number {
   return parsed
 }
 
-/** Pack the family named by `--family` into `--out`. */
-async function main(): Promise<void> {
+/** Parsed release-pack invocation shared by the executable and tests. */
+export interface ReleasePackInvocation {
+  readonly family: string
+  readonly out?: string
+  readonly concurrency?: string
+  readonly profile: ClientBuildProfile
+}
+
+/** Parse release-pack options while keeping official as the default profile. */
+export function parseReleasePackInvocation(argv: readonly string[]): ReleasePackInvocation {
   const { values } = parseArgs({
-    options: { family: { type: 'string' }, out: { type: 'string' }, concurrency: { type: 'string' } },
+    args: [...argv],
+    options: {
+      family: { type: 'string' },
+      out: { type: 'string' },
+      concurrency: { type: 'string' },
+      profile: { type: 'string' },
+    },
     allowPositionals: false,
   })
-  if (values.family === undefined) throw new Error('usage: pack.ts --family <dsh|vendor> [--out dist/npm] [--concurrency 1]')
-  const concurrency = parseConcurrency(values.concurrency)
+  if (values.family === undefined) throw new Error('usage: pack.ts --family <dsh|vendor> [--profile official|thunderuni] [--out dist/npm] [--concurrency 1]')
+  const result: {
+    family: string
+    profile: ClientBuildProfile
+    out?: string
+    concurrency?: string
+  } = {
+    family: values.family,
+    profile: parseClientBuildProfile(values.profile),
+  }
+  if (values.out !== undefined) result.out = values.out
+  if (values.concurrency !== undefined) result.concurrency = values.concurrency
+  return result
+}
 
-  const family = releaseFamily(values.family)
+/** Pack the family named by `--family` into `--out`. */
+async function main(): Promise<void> {
+  const invocation = parseReleasePackInvocation(process.argv.slice(2))
+  const concurrency = parseConcurrency(invocation.concurrency)
+
+  const family = releaseFamily(invocation.family)
   const root = process.cwd()
-  const destination = resolve(root, values.out ?? DEFAULT_OUTPUT)
+  const destination = resolve(root, invocation.out ?? DEFAULT_OUTPUT)
   const members = family.publishOrder(family.members(root)).order
-  family.verifyBuildArtifacts(root)
+  family.verifyBuildArtifacts(root, invocation.profile)
   family.verifyVersions(members)
 
   rmSync(destination, { recursive: true, force: true })
@@ -84,7 +119,7 @@ async function main(): Promise<void> {
   }))
   writeFileSync(join(destination, PUBLISH_ORDER_FILE), `${order.join('\n')}\n`)
 
-  console.log(`release pack: family ${family.id}, ${String(order.length)} tarball(s) in ${values.out ?? DEFAULT_OUTPUT}`)
+  console.log(`release pack: family ${family.id}, ${String(order.length)} tarball(s) in ${invocation.out ?? DEFAULT_OUTPUT}`)
 }
 
 if (isEntry(import.meta.url)) await main()

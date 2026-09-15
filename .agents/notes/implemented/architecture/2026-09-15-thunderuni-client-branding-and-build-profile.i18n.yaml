@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-15-thunderuni-client-branding-and-build-profile.md
+2026-09-15-thunderuni-client-branding-and-build-profile.md: 26a9169e6759755454d988b2e7e91fa39a63c314
+2026-09-15-thunderuni-client-branding-and-build-profile.zh.md: 2d941a1c43d28716237ad57b86bec37596f71ece

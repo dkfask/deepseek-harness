@@ -9,7 +9,7 @@ const src = (rel: string): string => fileURLToPath(new URL(rel, import.meta.url)
 const STANDALONE_ERROR = 'apps/web is not a standalone application: bare Vite cannot inject window.__DSH_BOOT__. '
   + 'From a repository checkout, run `pnpm dsh web`; an installed package uses `dsh web`. '
   + 'For client-plugin HMR, run `pnpm dsh web` together with `pnpm run dev:web`.'
-const DEFAULT_CLIENT_TITLE = 'DSH Local Build'
+const DEFAULT_CLIENT_TITLE = 'ThunderUni'
 
 /** Escape build-time text before placing it in the HTML title element. */
 function escapeHtmlText(value: string): string {
@@ -22,11 +22,41 @@ function clientDocumentTitle(): Plugin {
   return {
     name: 'dsh-client-document-title',
     transformIndexHtml(html) {
-      return html.replace('<title>DSH Local Build</title>', `<title>${title}</title>`)
+      return html.replace('<title>ThunderUni</title>', `<title>${title}</title>`)
     },
   }
 }
 
+/** Project the public build title into the install manifest asset. */
+function clientManifest(): Plugin {
+  const name = process.env.DSH_CLIENT_TITLE ?? DEFAULT_CLIENT_TITLE
+  let write = true
+  return {
+    name: 'dsh-client-manifest',
+    configResolved(config) {
+      write = config.build.write
+    },
+    async closeBundle() {
+      if (!write) return
+      const path = src('./dist/manifest.webmanifest')
+      const source = await readFile(path, 'utf8')
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(source)
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error)
+        throw new Error(`vite: manifest.webmanifest is invalid JSON: ${detail}`)
+      }
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('vite: manifest.webmanifest must contain a JSON object')
+      }
+      const output = parsed as Record<string, unknown>
+      output.name = name
+      output.short_name = name
+      await writeFile(path, `${JSON.stringify(output, null, 2)}\n`)
+    },
+  }
+}
 /** Fail before a Vite dev or preview server can expose the boot-manifest-free shell. */
 function rejectStandaloneServe(): Plugin {
   return {
@@ -147,7 +177,7 @@ export default defineConfig({
   // Relative asset URLs: preview.html mounts the same output under any base
   // directory, and the served index resolves identically from the site root.
   base: './',
-  plugins: [rejectStandaloneServe(), clientDocumentTitle(), react(), emitPreviewPage()],
+  plugins: [rejectStandaloneServe(), clientDocumentTitle(), clientManifest(), react(), emitPreviewPage()],
   build: {
     // The worker bootstrap holds its page at top-level await; Vite's default
     // `modules` target (es2020-era) rejects that syntax.

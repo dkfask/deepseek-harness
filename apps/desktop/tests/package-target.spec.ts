@@ -35,9 +35,15 @@ describe('desktop package target', () => {
 
   it('parses installer and unpacked-directory invocations', () => {
     expect(parseDesktopPackageInvocation(['mac-arm64'], 'darwin', 'arm64').directory).toBe(false)
+    expect(parseDesktopPackageInvocation(['mac-arm64'], 'darwin', 'arm64').profile).toBe('official')
+    expect(parseDesktopPackageInvocation(['mac-arm64', '--profile', 'thunderuni'], 'darwin', 'arm64').profile).toBe('thunderuni')
     expect(parseDesktopPackageInvocation(['mac-arm64', '--dir'], 'darwin', 'arm64').directory).toBe(true)
     expect(parseDesktopPackageInvocation([], 'darwin', 'arm64').target.name).toBe('mac-arm64')
-    expect(parseDesktopPackageInvocation(['--prepare-only'], 'darwin', 'arm64').prepareOnly).toBe(true)
+    expect(parseDesktopPackageInvocation(['--prepare-only', '--', '--profile', 'thunderuni'], 'darwin', 'arm64')).toMatchObject({
+      prepareOnly: true, profile: 'thunderuni',
+    })
+    expect(() => parseDesktopPackageInvocation(['mac-arm64', '--profile', 'unknown'], 'darwin', 'arm64'))
+      .toThrow(/official.*thunderuni/u)
     expect(() => parseDesktopPackageInvocation(['mac-arm64', 'mac-x64'], 'darwin', 'arm64'))
       .toThrow(/at most one target/u)
   })

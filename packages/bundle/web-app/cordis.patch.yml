@@ -255,9 +255,13 @@
     - id: ui-chat
       name: '@deepseek-ai/dsh-client-ui-chat'
 
-    # Official occupants for the generic sidebar and conversation brand slots.
+    # Official and ThunderUni occupants share the generic sidebar brand slots.
+    # Each package gates on its own build profile, so exactly one set is live.
     - id: ui-brand-official
       name: '@deepseek-ai/dsh-client-ui-brand-official'
+
+    - id: ui-brand-thunderuni
+      name: '@deepseek-ai/dsh-client-ui-brand-thunderuni'
 
     - id: ui-attachment
       name: '@deepseek-ai/dsh-client-ui-attachment'

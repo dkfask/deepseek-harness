@@ -1,0 +1,291 @@
+# Build a signed Windows Desktop release once, then publish the exact artifact.
+# This is deliberately separate from the npm dsh release workflows. The pack job
+# owns the SafeNet-backed signing runner; the optional publish job only consumes
+# the artifact produced by that same workflow run.
+name: Release publish (Desktop Windows)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: dsh release tag to build, for example dsh-v0.1.5-rc.2
+        required: true
+        type: string
+      profile:
+        description: Immutable Web client artifact embedded in Desktop
+        required: true
+        default: thunderuni
+        type: choice
+        options:
+          - thunderuni
+          - official
+      environment:
+        description: Desktop update deployment used by packaging and upload
+        required: true
+        default: test
+        type: choice
+        options:
+          - test
+          - production
+      publish:
+        description: Upload the validated artifact after the protected publish review
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ inputs.ref }}-${{ inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  PRIMARY_NODE_VERSION: '24'
+  DSH_TELEMETRY_DISABLED: '1'
+
+jobs:
+  pack:
+    name: Sign and pack Windows Desktop
+    # This label must identify the protected Windows x64 runner with the
+    # SafeNet middleware, CSP, SignTool, and unlocked EV token.
+    runs-on: [self-hosted, dsh-win-release, windows, x64]
+    environment: desktop-signing
+    timeout-minutes: 120
+    outputs:
+      artifact_name: ${{ steps.bundle.outputs.artifact_name }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+          clean: true
+
+      - name: Verify selected release tag before installing code
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.ref }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^dsh-v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+            throw "Desktop release requires a dsh-v* tag, got $env:RELEASE_TAG"
+          }
+          $checkedOutTag = (git describe --exact-match --tags HEAD 2>$null).Trim()
+          if ($checkedOutTag -ne $env:RELEASE_TAG) {
+            throw "Checked-out commit is not the requested release tag: $checkedOutTag"
+          }
+
+      - name: Enable Developer Mode (symlink support)
+        shell: pwsh
+        run: >-
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock"
+          /t REG_DWORD /f /v "AllowDevelopmentWithoutDevLicense" /d "1"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm-js-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Install (immutable)
+        shell: pwsh
+        run: >-
+          $drive = (Split-Path -Qualifier $env:GITHUB_WORKSPACE).TrimEnd(':');
+          $fs = (Get-Volume -DriveLetter $drive).FileSystem;
+          if ($fs -eq 'ReFS') {
+            corepack pnpm install --frozen-lockfile --package-import-method=clone
+          } else {
+            pnpm install --frozen-lockfile
+          }
+
+      - name: Verify release version and publish gate
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.ref }}
+        run: |
+          $env:GITHUB_REF = "refs/tags/$env:RELEASE_TAG"
+          $env:RELEASE_PUBLISH = 'true'
+          pnpm run release:verify --family dsh
+
+      - name: Build and package signed Desktop artifact
+        shell: pwsh
+        env:
+          DSH_CLIENT_PROFILE: ${{ inputs.profile }}
+          DSH_DESKTOP_APP_ID: ${{ vars.DSH_DESKTOP_APP_ID }}
+          DSH_DESKTOP_AUTO_UPDATE_ENV: ${{ inputs.environment }}
+          DOWNLOAD_TEST_ORIGIN: ${{ vars.DOWNLOAD_TEST_ORIGIN }}
+          DSH_DESKTOP_WINDOWS_CER_FILE: ${{ vars.DSH_DESKTOP_WINDOWS_CER_FILE }}
+          DSH_DESKTOP_WINDOWS_SIGNTOOL: ${{ vars.DSH_DESKTOP_WINDOWS_SIGNTOOL }}
+          DSH_DESKTOP_WINDOWS_KEY_CONTAINER: ${{ vars.DSH_DESKTOP_WINDOWS_KEY_CONTAINER }}
+          DSH_DESKTOP_WINDOWS_TOKEN_PIN: ${{ secrets.DSH_DESKTOP_WINDOWS_TOKEN_PIN }}
+        run: pnpm run package:desktop:win:x64 -- --profile $env:DSH_CLIENT_PROFILE
+
+      - name: Stage artifact provenance
+        id: bundle
+        shell: pwsh
+        env:
+          CLIENT_PROFILE: ${{ inputs.profile }}
+          DEPLOYMENT: ${{ inputs.environment }}
+          RELEASE_TAG: ${{ inputs.ref }}
+        run: |
+          $artifactRoot = Join-Path $env:GITHUB_WORKSPACE 'apps/desktop/.desktop-build/targets/win-x64/artifacts'
+          $clientRecordPath = Join-Path $env:GITHUB_WORKSPACE '.dsh-build/client-build-environment.json'
+          $bundleRoot = Join-Path $env:GITHUB_WORKSPACE '.desktop-build/windows-desktop-release'
+          $bundleArtifacts = Join-Path $bundleRoot 'artifacts'
+          if (-not (Test-Path -LiteralPath $artifactRoot -PathType Container)) { throw "Missing Desktop artifact directory: $artifactRoot" }
+          if (-not (Test-Path -LiteralPath $clientRecordPath -PathType Leaf)) { throw "Missing client build record: $clientRecordPath" }
+          Remove-Item -LiteralPath $bundleRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $bundleArtifacts -Force | Out-Null
+          Copy-Item -Path (Join-Path $artifactRoot '*') -Destination $bundleArtifacts -Recurse -Force
+
+          $clientRecord = Get-Content -LiteralPath $clientRecordPath -Raw | ConvertFrom-Json
+          if ($clientRecord.environment.DSH_CLIENT_BUILD_PROFILE -ne $env:CLIENT_PROFILE) {
+            throw "Client build profile does not match workflow input"
+          }
+          $dshVersion = (Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'package.json') -Raw | ConvertFrom-Json).version
+          $desktopVersion = (Get-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'apps/desktop/package.json') -Raw | ConvertFrom-Json).version
+          if ($dshVersion -ne $desktopVersion) { throw "Desktop and dsh versions do not match" }
+
+          $artifactHashes = [ordered]@{}
+          $files = @(Get-ChildItem -LiteralPath $bundleArtifacts -File | Sort-Object Name)
+          if ($files.Count -eq 0) { throw 'Desktop package produced no release artifacts' }
+          foreach ($file in $files) {
+            $artifactHashes[$file.Name] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
+          $provenance = [ordered]@{
+            schemaVersion = 1
+            target = 'win-x64'
+            ref = $env:RELEASE_TAG
+            commit = (git rev-parse HEAD).Trim()
+            profile = $env:CLIENT_PROFILE
+            environment = $env:DEPLOYMENT
+            version = $dshVersion
+            artifactHashes = $artifactHashes
+          }
+          $provenance | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $bundleRoot 'provenance.json') -Encoding utf8
+          $artifactName = "desktop-win-x64-$($env:CLIENT_PROFILE)-$env:GITHUB_RUN_ID"
+          "artifact_name=$artifactName" >> $env:GITHUB_OUTPUT
+
+      - name: Upload signed Desktop artifact bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.bundle.outputs.artifact_name }}
+          path: .desktop-build/windows-desktop-release
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    if: inputs.publish
+    name: Publish validated Windows Desktop artifact
+    needs: pack
+    runs-on: ubuntu-24.04
+    environment: desktop-${{ inputs.environment }}
+    concurrency:
+      group: desktop-publish-${{ inputs.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+          clean: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Install release tooling (immutable, no package scripts)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.pack.outputs.artifact_name }}
+          path: .desktop-build/downloaded-desktop-release
+
+      - name: Validate provenance and restore exact artifacts
+        env:
+          CLIENT_PROFILE: ${{ inputs.profile }}
+          DEPLOYMENT: ${{ inputs.environment }}
+          RELEASE_TAG: ${{ inputs.ref }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { basename, dirname, join, resolve } from 'node:path'
+          import { createHash } from 'node:crypto'
+          import { execFileSync } from 'node:child_process'
+          import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+
+          const workspace = process.cwd()
+          const downloadRoot = resolve(workspace, '.desktop-build/downloaded-desktop-release')
+          const targetRoot = resolve(workspace, 'apps/desktop/.desktop-build/targets/win-x64/artifacts')
+          function findFile(root, name) {
+            for (const entry of readdirSync(root, { withFileTypes: true })) {
+              const path = join(root, entry.name)
+              if (entry.isFile() && entry.name === name) return path
+              if (entry.isDirectory()) {
+                const found = findFile(path, name)
+                if (found !== undefined) return found
+              }
+            }
+            return undefined
+          }
+          const provenancePath = findFile(downloadRoot, 'provenance.json')
+          if (provenancePath === undefined) throw new Error('downloaded Desktop provenance.json is missing')
+          const bundleRoot = dirname(provenancePath)
+          const artifactRoot = join(bundleRoot, 'artifacts')
+          const provenance = JSON.parse(readFileSync(provenancePath, 'utf8'))
+          const expected = {
+            target: 'win-x64',
+            ref: process.env.RELEASE_TAG,
+            profile: process.env.CLIENT_PROFILE,
+            environment: process.env.DEPLOYMENT,
+          }
+          for (const [key, value] of Object.entries(expected)) {
+            if (provenance[key] !== value) throw new Error(`Desktop provenance ${key} does not match this publish request`)
+          }
+          const exactTag = execFileSync('git', ['describe', '--exact-match', '--tags', 'HEAD'], { encoding: 'utf8' }).trim()
+          if (exactTag !== process.env.RELEASE_TAG) throw new Error('checked-out commit is not the requested release tag')
+          if (provenance.commit !== execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()) {
+            throw new Error('Desktop provenance commit does not match the checked-out ref')
+          }
+          const packageVersion = JSON.parse(readFileSync(join(workspace, 'package.json'), 'utf8')).version
+          const desktopVersion = JSON.parse(readFileSync(join(workspace, 'apps/desktop/package.json'), 'utf8')).version
+          if (provenance.version !== packageVersion || packageVersion !== desktopVersion) {
+            throw new Error('Desktop provenance version does not match the checked-out packages')
+          }
+          const hashes = provenance.artifactHashes
+          if (hashes === null || typeof hashes !== 'object' || Array.isArray(hashes)) throw new Error('Desktop provenance artifactHashes is invalid')
+          for (const [filename, expectedHash] of Object.entries(hashes)) {
+            if (typeof expectedHash !== 'string' || filename !== basename(filename) || filename.includes('\\')) {
+              throw new Error(`Desktop provenance contains an unsafe artifact filename: ${filename}`)
+            }
+            const path = join(artifactRoot, filename)
+            if (!statSync(path, { throwIfNoEntry: false })?.isFile()) throw new Error(`Desktop artifact is missing: ${filename}`)
+            const actualHash = createHash('sha256').update(readFileSync(path)).digest('hex')
+            if (actualHash !== expectedHash) throw new Error(`Desktop artifact hash mismatch: ${filename}`)
+          }
+          rmSync(targetRoot, { recursive: true, force: true })
+          mkdirSync(targetRoot, { recursive: true })
+          for (const filename of Object.keys(hashes)) copyFileSync(join(artifactRoot, filename), join(targetRoot, filename))
+          NODE
+
+      - name: Upload validated Windows Desktop release
+        env:
+          DSH_DESKTOP_AUTO_UPDATE_ENV: ${{ inputs.environment }}
+          DOWNLOAD_TEST_ORIGIN: ${{ vars.DOWNLOAD_TEST_ORIGIN }}
+          DOWNLOAD_TEST_COS_BUCKET: ${{ inputs.environment == 'test' && secrets.DOWNLOAD_TEST_COS_BUCKET || '' }}
+          DOWNLOAD_TEST_COS_SECRET_ID: ${{ inputs.environment == 'test' && secrets.DOWNLOAD_TEST_COS_SECRET_ID || '' }}
+          DOWNLOAD_TEST_COS_SECRET_KEY: ${{ inputs.environment == 'test' && secrets.DOWNLOAD_TEST_COS_SECRET_KEY || '' }}
+          DOWNLOAD_PROD_COS_BUCKET: ${{ inputs.environment == 'production' && secrets.DOWNLOAD_PROD_COS_BUCKET || '' }}
+          DOWNLOAD_PROD_COS_SECRET_ID: ${{ inputs.environment == 'production' && secrets.DOWNLOAD_PROD_COS_SECRET_ID || '' }}
+          DOWNLOAD_PROD_COS_SECRET_KEY: ${{ inputs.environment == 'production' && secrets.DOWNLOAD_PROD_COS_SECRET_KEY || '' }}
+        run: pnpm run upload:win:x64

@@ -12,7 +12,8 @@
 import { globSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
-  officialClientBuildEnvironment,
+  clientBuildEnvironmentForProfile,
+  type ClientBuildProfile,
   readClientBuildRecord,
 } from '../client-build-environment.ts'
 import { PUBLIC_EXPERIMENTAL_PACKAGE_DIRECTORIES } from '../experimental-package-policy.ts'
@@ -112,8 +113,9 @@ export abstract class ReleaseFamily {
    * Assert that built artifacts match this release family's required profile.
    * Families without environment-selected artifacts accept every build tree.
    * @param _root - repository root containing generated artifacts.
+   * @param _profile - selected client artifact profile.
    */
-  verifyBuildArtifacts(_root: string): void {}
+  verifyBuildArtifacts(_root: string, _profile: ClientBuildProfile = 'official'): void {}
 
   /**
    * Discover this family's members.
@@ -329,9 +331,9 @@ class DshFamily extends ReleaseFamily {
   ] as const
   readonly tagPrefix = 'dsh-v'
 
-  /** Require current artifacts from a complete official client build. */
-  override verifyBuildArtifacts(root: string): void {
-    readClientBuildRecord(root, officialClientBuildEnvironment(root))
+  /** Require current artifacts from the selected client build profile. */
+  override verifyBuildArtifacts(root: string, profile: ClientBuildProfile = 'official'): void {
+    readClientBuildRecord(root, clientBuildEnvironmentForProfile(root, profile))
   }
 
   /**

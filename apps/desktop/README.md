@@ -63,7 +63,7 @@ Workspace development runs the current CLI and private Desktop Host packages und
 
 ## Package
 
-The normal packaging path is one complete command. It performs release preparation before creating the host platform's installers and update metadata. Every target requires a reverse-DNS `DSH_DESKTOP_APP_ID`. macOS targets additionally require the electron-builder certificate qualifier in `DSH_DESKTOP_MACOS_SIGNING_IDENTITY`, its 10-character Apple Team ID in `DSH_DESKTOP_MACOS_TEAM_ID`, and one complete notarytool credential strategy. The App Store Connect API-key strategy uses these variables:
+The normal packaging path is one complete command. It performs release preparation before creating the host platform's installers and update metadata. Every target requires a reverse-DNS `DSH_DESKTOP_APP_ID`. macOS targets additionally require the electron-builder certificate qualifier in `DSH_DESKTOP_MACOS_SIGNING_IDENTITY`, its 10-character Apple Team ID in `DSH_DESKTOP_MACOS_TEAM_ID`, and one complete notarytool credential strategy. App Store Connect API-key strategy uses these variables:
 
 ```sh
 export DSH_DESKTOP_APP_ID='<reverse-DNS application ID>'
@@ -80,7 +80,14 @@ export APPLE_API_ISSUER='<App Store Connect issuer UUID>'
 pnpm run package:desktop
 ```
 
-Release automation uses fixed target commands so runtime preparation, dsh preparation, and electron-builder receive the same platform and architecture:
+`--profile` selects the immutable client artifact embedded in the package and defaults to `official`. Use `--profile thunderuni` to package the ThunderUni Web workspace; this choice is passed to the complete client build and the dsh release-artifact verifier together.
+
+```sh
+pnpm --filter @deepseek-ai/dsh-desktop run package:mac:arm64 -- --profile thunderuni
+pnpm --filter @deepseek-ai/dsh-desktop run package:dir -- --profile thunderuni
+```
+
+The Desktop user's runtime profile controls installed plugins, not the Web brand. `prepare:dsh` does not rebuild the Web frontend, and an already prepared or packaged application does not change when the workspace is edited; rebuild the target to change its embedded client artifacts. The Electron shell product name and installer identity remain `DeepSeek Harness` in this client-branding change.
 
 ```sh
 pnpm run package:desktop:mac:arm64
@@ -91,6 +98,14 @@ pnpm run package:desktop:win:x64
 The macOS arm64 command requires Apple Silicon. The macOS x64 command runs on Intel macOS or Apple Silicon with Rosetta. The Windows x64 command requires Windows x64. Linux is not a supported Desktop release target.
 
 Each target owns its packed package inputs, prepared runtime, package set, dsh tree, pnpm preparation state, unpacked application, update metadata, and final artifacts under `apps/desktop/.desktop-build/targets/<target>/`. The Node.js archive cache remains shared under `.desktop-build/downloads` because every archive name includes its version, platform, and architecture and is verified before extraction. A target build never consumes another target's mutable preparation state.
+
+### Windows release workflow
+
+The independent [`release-desktop-publish.yml`](../../.github/workflows/release-desktop-publish.yml) workflow provides a release-shaped Windows path without changing the npm dsh release workflows. Dispatch it with an exact `dsh-v*` tag, the immutable client `profile` (`thunderuni` or `official`), the update `environment` (`test` or `production`), and `publish` enabled only when the protected upload review is complete. The pack job runs once on a Windows x64 self-hosted runner, signs the installer with the SafeNet-backed EV certificate, records the tag, commit, version, profile, environment, and per-file SHA-256 hashes, then uploads the bundle as an Actions artifact. The publish job checks out the same tag, verifies that provenance and every hash match, restores the files to `apps/desktop/.desktop-build/targets/win-x64/artifacts/`, and calls `upload:win:x64`; it does not run package, build, or signing again. Rerunning a failed publish job republishes the same workflow artifact.
+
+The pack job needs `DSH_DESKTOP_APP_ID` and the four Windows signing inputs: `DSH_DESKTOP_WINDOWS_CER_FILE`, `DSH_DESKTOP_WINDOWS_SIGNTOOL`, `DSH_DESKTOP_WINDOWS_KEY_CONTAINER`, and `DSH_DESKTOP_WINDOWS_TOKEN_PIN`, plus the SafeNet token and the selected update origin when using the test environment. COS bucket, SecretId, and SecretKey belong only to the protected `desktop-test` or `desktop-production` publish environment. Never place the token PIN, private key material, or COS credentials in the repository, an `.env` file, or an Actions artifact.
+
+This workflow guarantees one-build/repeated-publish semantics for the same signed bytes. It does not promise byte-for-byte reproducibility across new builds: Authenticode signing and the RFC 3161 timestamp are external, time-dependent operations. The unsigned Windows command remains a local or credential-free CI rehearsal only; it has no completion record or updater metadata and cannot enter `upload:win:x64`.
 
 ### Runtime file selection
 

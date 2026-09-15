@@ -10,6 +10,10 @@ import {
 } from './desktop-auto-update-environment.mjs'
 import { desktopTargetBuildPaths } from './desktop-build-paths.mjs'
 import { packageMacOSArtifacts, type DesktopPrepackagedArtifact } from './package-macos.ts'
+import {
+  parseClientBuildProfile,
+  type ClientBuildProfile,
+} from '../../../scripts/client-build-environment.ts'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const REPOSITORY_ROOT = resolve(APP_ROOT, '..', '..')
@@ -168,11 +172,12 @@ export function resolveDesktopPackageTarget(
   return target
 }
 
-interface DesktopPackageInvocation {
+export interface DesktopPackageInvocation {
   readonly target: DesktopPackageTarget
   readonly directory: boolean
   readonly prepareOnly: boolean
   readonly unsigned: boolean
+  readonly profile: ClientBuildProfile
 }
 
 function hostTargetName(platform: NodeJS.Platform, arch: string): DesktopPackageTargetName {
@@ -194,12 +199,13 @@ export function parseDesktopPackageInvocation(
   hostArch: string = process.arch,
 ): DesktopPackageInvocation {
   const { values, positionals } = parseArgs({
-    args: [...argv],
+    args: [...argv].filter(argument => argument !== '--'),
     allowPositionals: true,
     options: {
       dir: { type: 'boolean', default: false },
       'prepare-only': { type: 'boolean', default: false },
       unsigned: { type: 'boolean', default: false },
+      profile: { type: 'string' },
     },
   })
   if (positionals.length > 1) throw new Error('desktop package: expected at most one target')
@@ -211,6 +217,7 @@ export function parseDesktopPackageInvocation(
     directory: values.dir,
     prepareOnly: values['prepare-only'],
     unsigned: values.unsigned,
+    profile: parseClientBuildProfile(values.profile, 'desktop package profile'),
   }
 }
 
@@ -287,8 +294,8 @@ async function main(): Promise<void> {
   for (const name of WINDOWS_SIGNING_ENV_NAMES) {
     if (!invocation.unsigned && process.env[name] !== undefined) electronBuilderEnv[name] = process.env[name]
   }
-  await runPnpm(['run', 'build:official'], buildEnv, REPOSITORY_ROOT)
-  await runPnpm(['run', 'release:pack', '--family', 'dsh', '--out', buildPaths.packedDsh], buildEnv, REPOSITORY_ROOT)
+  await runPnpm(['run', 'build', '--', '--profile', invocation.profile], buildEnv, REPOSITORY_ROOT)
+  await runPnpm(['run', 'release:pack', '--family', 'dsh', '--profile', invocation.profile, '--out', buildPaths.packedDsh], buildEnv, REPOSITORY_ROOT)
   await runPnpm([
     '--dir',
     'apps/desktop-host',

@@ -31,6 +31,7 @@ function runScript(script: string, environment: NodeJS.ProcessEnv): void {
 /** Run the full build selected by `--profile` or `DSH_BUILD_CLIENT_PROFILE`. */
 function main(): void {
   const { values } = parseArgs({
+    args: process.argv.slice(2).filter(argument => argument !== '--'),
     options: { profile: { type: 'string' } },
     allowPositionals: false,
   })

@@ -4,16 +4,31 @@ import { join } from 'node:path'
 import { expect, it } from 'vitest'
 
 const DIST_ROOT = fileURLToPath(new URL('../dist', import.meta.url))
+const BUILD_RECORD_PATH = fileURLToPath(new URL('../../../.dsh-build/client-build-environment.json', import.meta.url))
+
+interface ClientBuildRecord {
+  readonly environment?: {
+    readonly DSH_CLIENT_TITLE?: string
+  }
+}
+
+async function clientBuildTitle(): Promise<string> {
+  const record = JSON.parse(await readFile(BUILD_RECORD_PATH, 'utf8')) as ClientBuildRecord
+  const title = record.environment?.DSH_CLIENT_TITLE
+  if (title === undefined) throw new Error('client build record must carry DSH_CLIENT_TITLE')
+  return title
+}
 
 it('ships install metadata with the built web application', async () => {
   const index = await readFile(join(DIST_ROOT, 'index.html'), 'utf8')
   expect(index).toContain('<link rel="manifest" href="./manifest.webmanifest" />')
 
   const manifest: unknown = JSON.parse(await readFile(join(DIST_ROOT, 'manifest.webmanifest'), 'utf8'))
+  const title = await clientBuildTitle()
   expect(manifest).toEqual({
     id: '/',
-    name: 'DeepSeek Harness',
-    short_name: 'DSH',
+    name: title,
+    short_name: title,
     start_url: '/',
     scope: '/',
     display: 'fullscreen',

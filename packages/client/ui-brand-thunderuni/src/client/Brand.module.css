@@ -1,0 +1,9 @@
+/* ThunderUni wordmark styling follows the sidebar's inherited color tokens. */
+.name {
+  color: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 24px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}

@@ -80,7 +80,14 @@ export APPLE_API_ISSUER='<App Store Connect issuer UUID>'
 pnpm run package:desktop
 ```
 
-发布自动化使用固定目标命令，确保运行时准备、dsh 准备与 electron-builder 接收相同的平台和架构：
+`--profile` 选择打包进应用的不可变客户端产物，默认值为 `official`。使用 `--profile thunderuni` 可以打包 ThunderUni Web 工作区；这个选择会同时传给完整客户端构建和 dsh 发布产物校验器。
+
+```sh
+pnpm --filter @deepseek-ai/dsh-desktop run package:mac:arm64 -- --profile thunderuni
+pnpm --filter @deepseek-ai/dsh-desktop run package:dir -- --profile thunderuni
+```
+
+Desktop 用户的运行时 profile 负责已安装插件，不负责 Web 品牌。`prepare:dsh` 不会重新构建 Web 前端，已经准备或打包的应用也不会随着工作区编辑而变化；要改变内嵌客户端产物，必须重新构建目标。这个客户端品牌变更不会改动 Electron 壳的产品名和安装包身份，它们仍是 `DeepSeek Harness`。
 
 ```sh
 pnpm run package:desktop:mac:arm64
@@ -91,6 +98,14 @@ pnpm run package:desktop:win:x64
 macOS arm64 命令要求 Apple Silicon。macOS x64 命令可以在 Intel macOS 或带 Rosetta 的 Apple Silicon 上运行。Windows x64 命令要求 Windows x64。Linux 不是受支持的 Desktop 发布目标。
 
 每个目标都在 `apps/desktop/.desktop-build/targets/<target>/` 下持有自己的打包输入、已准备运行时、包集合、dsh 依赖树、pnpm 准备状态、未打包应用、更新元数据和最终产物。Node.js 归档缓存继续由 `.desktop-build/downloads` 共享，因为每个归档文件名都包含版本、平台和架构，并且在解包前经过验证。目标构建绝不读取其他目标的可变准备状态。
+
+### Windows 发布工作流
+
+独立的 [`release-desktop-publish.yml`](../../.github/workflows/release-desktop-publish.yml) 提供类似 release 的 Windows 流程，不修改 npm dsh release workflow。手动触发时必须提供精确的 `dsh-v*` tag、不可变客户端 `profile`（`thunderuni` 或 `official`）、更新 `environment`（`test` 或 `production`），只有完成受保护的上传审核后才启用 `publish`。pack job 只在 Windows x64 self-hosted runner 上运行一次，使用 SafeNet EV 证书签名安装包，记录 tag、commit、版本、profile、环境和逐文件 SHA-256，然后把 bundle 上传为 Actions artifact。publish job checkout 同一个 tag，验证 provenance 与每个 hash 一致，把文件恢复到 `apps/desktop/.desktop-build/targets/win-x64/artifacts/`，再调用 `upload:win:x64`；它不会再次执行 package、build 或签名。发布失败重跑时复用同一 workflow artifact。
+
+pack job 需要 `DSH_DESKTOP_APP_ID` 和四个 Windows 签名输入：`DSH_DESKTOP_WINDOWS_CER_FILE`、`DSH_DESKTOP_WINDOWS_SIGNTOOL`、`DSH_DESKTOP_WINDOWS_KEY_CONTAINER`、`DSH_DESKTOP_WINDOWS_TOKEN_PIN`，还需要 SafeNet token，以及 test 环境下所选更新源。COS bucket、SecretId 和 SecretKey 只属于受保护的 `desktop-test` 或 `desktop-production` publish environment。不要把 token PIN、私钥材料或 COS 凭据放进仓库、`.env` 文件或 Actions artifact。
+
+这个流程保证同一份已签名字节只构建一次、可以重复发布；不承诺新构建之间逐字节可复现，因为 Authenticode 签名和 RFC 3161 时间戳依赖外部且随时间变化。未签名 Windows 命令仍只用于本地或无凭据 CI rehearsal；它没有完成记录或更新 metadata，不能进入 `upload:win:x64`。
 
 ### 运行时文件筛选
 

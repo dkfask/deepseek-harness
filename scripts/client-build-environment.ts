@@ -22,6 +22,12 @@ const OFFICIAL_CLIENT_BUILD_ENVIRONMENT = {
   DSH_CLIENT_TITLE: 'DeepSeek Harness',
 } as const
 
+/** Public client environment required by ThunderUni artifacts. */
+const THUNDERUNI_CLIENT_BUILD_ENVIRONMENT = {
+  DSH_CLIENT_BUILD_PROFILE: 'thunderuni',
+  DSH_CLIENT_TITLE: 'ThunderUni',
+} as const
+
 /** Public variable carrying the source commit embedded in client artifacts. */
 const CLIENT_COMMIT_HASH_VARIABLE = 'DSH_CLIENT_COMMIT_HASH'
 
@@ -130,6 +136,34 @@ export function repositoryClientBuildEnvironment(
   }
 }
 
+/** Public client profiles with a complete artifact environment. */
+export type ClientBuildProfile = 'official' | 'thunderuni'
+
+/** Parse a public client profile, preserving the official default. */
+export function parseClientBuildProfile(value: string | undefined, subject = 'client build profile'): ClientBuildProfile {
+  const profile = value ?? 'official'
+  if (profile !== 'official' && profile !== 'thunderuni') {
+    throw new Error(`${subject} must be "official" or "thunderuni", got ${JSON.stringify(profile)}`)
+  }
+  return profile
+}
+
+/**
+ * Resolve the exact public environment required by a named complete build.
+ * @param root - repository root whose version and commit identify the build.
+ * @param profile - client artifact profile.
+ * @param environment - optional explicit commit source for non-Git build environments.
+ * @returns complete public client environment.
+ */
+export function clientBuildEnvironmentForProfile(
+  root: string,
+  profile: ClientBuildProfile = 'official',
+  environment: NodeJS.ProcessEnv = process.env,
+): ClientBuildEnvironment {
+  const repositoryEnvironment = repositoryClientBuildEnvironment(root, environment)
+  return resolveClientBuildEnvironment(repositoryEnvironment, profile)
+}
+
 /**
  * Resolve the exact public values required by an official build at one commit.
  * @param root - repository root whose HEAD must match the built source.
@@ -140,11 +174,7 @@ export function officialClientBuildEnvironment(
   root: string,
   environment: NodeJS.ProcessEnv = process.env,
 ): Readonly<Record<`DSH_CLIENT_${string}`, string>> {
-  return {
-    DSH_CLIENT_COMMIT_HASH: repositoryCommitHash(root, environment),
-    DSH_CLIENT_VERSION: repositoryVersion(root),
-    ...OFFICIAL_CLIENT_BUILD_ENVIRONMENT,
-  }
+  return clientBuildEnvironmentForProfile(root, 'official', environment)
 }
 
 /** Digest of every client artifact produced by the complete root build. */
@@ -202,7 +232,22 @@ export function resolveClientBuildEnvironment(
       ...OFFICIAL_CLIENT_BUILD_ENVIRONMENT,
     }
   }
-  throw new Error(`unknown client build profile ${JSON.stringify(profile)}; expected "official"`)
+  if (profile === 'thunderuni') {
+    const commitHash = environment[CLIENT_COMMIT_HASH_VARIABLE]
+    const version = environment[CLIENT_VERSION_VARIABLE]
+    if (commitHash === undefined) {
+      throw new Error(`${CLIENT_COMMIT_HASH_VARIABLE} is required for the thunderuni client build profile`)
+    }
+    if (version === undefined) {
+      throw new Error(`${CLIENT_VERSION_VARIABLE} is required for the thunderuni client build profile`)
+    }
+    return {
+      DSH_CLIENT_COMMIT_HASH: commitHash,
+      DSH_CLIENT_VERSION: version,
+      ...THUNDERUNI_CLIENT_BUILD_ENVIRONMENT,
+    }
+  }
+  throw new Error(`unknown client build profile ${JSON.stringify(profile)}; expected "official" or "thunderuni"`)
 }
 
 /**
