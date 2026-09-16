@@ -43,7 +43,7 @@ To build a profile on the shared core, create a profile with a `package.json` th
 }
 ```
 
-Run `dsh --profile my-profile "your task"` and you get a working agent with model access, tools, persistence, and the default permission policy. The shipped `web`, `headless`, `sdk`, and `acp` profiles are created for you on first use. To add more bundles, run `dsh plugin --profile <name> add <package>`; in-box bundles resolve from the dsh installation. The profile contract is documented in the [app-boot profile section](../../boot/app-boot/README.md).
+Run `dsh --profile my-profile "your task"` and you get a working agent with model access, tools, persistence, and the default permission policy. The shipped `web`, `headless`, `sdk`, and `acp` profiles are created for you on first use. The private experimental Sub2API package is not included in the shipped bundles; a separately composed development profile must provide its verified deployment profile, transport validator, credential store, and explicit provider policy. To add more bundles, run `dsh plugin --profile <name> add <package>`; in-box bundles resolve from the dsh installation. The profile contract is documented in the [app-boot profile section](../../boot/app-boot/README.md).
 
 ### What you get
 

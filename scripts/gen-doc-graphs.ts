@@ -142,6 +142,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Owns isolated per-session replay folds; pressure consumers share immutable revisioned measurements.',
   },
   {
+    key: 'sub2api',
+    pkg: 'sub2api',
+    title: 'Sub2API account runtime',
+    mode: 'seam',
+    note: 'Owns deployment-bound account state, credential records, protocol requests, and Host-only gateway credential resolution; model and Remote consumers remain separately composed after compatibility evidence is verified.',
+  },
+  {
     key: 'toolResultPruner',
     pkg: 'compaction-tool-result-pruner',
     title: 'Model-free tool-result pruning',

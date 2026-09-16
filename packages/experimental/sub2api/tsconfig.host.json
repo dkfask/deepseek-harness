@@ -1,0 +1,33 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
+  },
+  "files": [
+    "src/index.ts",
+    "src/client/index.ts",
+    "src/cordis.ts",
+    "src/remote.ts",
+    "src/service.ts",
+    "src/types.ts",
+    "src/state.ts",
+    "src/profile.ts",
+    "src/record.ts",
+    "src/protocol.ts",
+    "src/http.ts",
+    "src/fixtures.ts",
+    "src/errors.ts",
+    "src/llm.ts",
+    "src/compatibility.ts"
+  ],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../util/brand" },
+    { "path": "../../credentials/credentials" },
+    { "path": "../../typert/protocol" },
+    { "path": "../../llm/llm/tsconfig.json" },
+    { "path": "../../llm/llm-pi-ai/tsconfig.json" }
+  ]
+}

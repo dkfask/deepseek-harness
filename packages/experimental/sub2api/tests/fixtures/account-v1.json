@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "synthetic-account-v1",
+  "profileVersion": "fixture-1",
+  "deploymentFingerprint": "fixture-1",
+  "exchanges": [
+    {
+      "name": "login",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "bodyKeys": ["email", "password"]
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "data": {
+            "access_token": "fixture-access-token",
+            "refresh_token": "fixture-refresh-token",
+            "expires_in": 3600
+          }
+        }
+      }
+    },
+    {
+      "name": "current-user",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/auth/me",
+        "requiredHeaders": ["authorization"]
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "data": {
+            "id": "fixture-user",
+            "email": "fixture@example.test",
+            "name": "Fixture User"
+          }
+        }
+      }
+    },
+    {
+      "name": "managed-key-list",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/keys",
+        "requiredHeaders": ["authorization"]
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "data": []
+        }
+      }
+    },
+    {
+      "name": "managed-key-create",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/keys",
+        "requiredHeaders": ["authorization"],
+        "bodyKeys": ["name"]
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "data": {
+            "id": "fixture-key",
+            "name": "harness:fixture",
+            "key": "fixture-api-key",
+            "active": true
+          }
+        }
+      }
+    },
+    {
+      "name": "models",
+      "request": {
+        "method": "GET",
+        "path": "/v1/models",
+        "requiredHeaders": ["x-api-key"]
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "data": [
+            {
+              "id": "fixture-model",
+              "name": "Fixture Model"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "usage",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/usage/dashboard/stats",
+        "requiredHeaders": ["authorization"]
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "data": {
+            "balance": 12.5,
+            "currency": "USD",
+            "used": 1.25,
+            "limit": 20
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "synthetic-gateway-v1",
+  "profileVersion": "fixture-1",
+  "deploymentFingerprint": "fixture-1",
+  "exchanges": [
+    {
+      "name": "login",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/auth/login",
+        "bodyKeys": ["email", "password"]
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "data": {
+            "access_token": "fixture-gateway-access",
+            "refresh_token": "fixture-gateway-refresh",
+            "expires_in": 3600
+          }
+        }
+      }
+    },
+    {
+      "name": "current-user",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/auth/me",
+        "requiredHeaders": ["authorization"]
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "data": {
+            "id": "fixture-gateway-user",
+            "email": "gateway@example.test",
+            "name": "Gateway Fixture User"
+          }
+        }
+      }
+    },
+    {
+      "name": "managed-key-list",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/keys",
+        "requiredHeaders": ["authorization"]
+      },
+      "response": {
+        "status": 200,
+        "body": { "data": [] }
+      }
+    },
+    {
+      "name": "managed-key-create",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/keys",
+        "requiredHeaders": ["authorization"],
+        "bodyKeys": ["name"]
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "data": {
+            "id": "fixture-gateway-key",
+            "name": "harness:fixture",
+            "key": "fixture-gateway-api-key",
+            "active": true
+          }
+        }
+      }
+    },
+    {
+      "name": "models",
+      "request": {
+        "method": "GET",
+        "path": "/v1/models",
+        "requiredHeaders": ["x-api-key"]
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "data": [
+            {
+              "id": "fixture-chat-model",
+              "name": "Fixture Chat Model",
+              "endpoint_family": "chat-completions",
+              "supports_streaming": true,
+              "supports_tools": "unknown",
+              "supports_vision": "unsupported",
+              "supports_reasoning": "unsupported",
+              "supports_responses": "unsupported",
+              "context_window": 131072,
+              "max_output_tokens": 8192,
+              "source": "fixture"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "chat-completions-nonstream",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "requiredHeaders": ["x-api-key"],
+        "bodyKeys": ["model", "messages", "stream"]
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "id": "fixture-completion-1",
+          "object": "chat.completion",
+          "choices": [{ "index": 0, "message": { "role": "assistant", "content": "fixture response" }, "finish_reason": "stop" }],
+          "usage": { "prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6 }
+        }
+      }
+    },
+    {
+      "name": "chat-completions-sse",
+      "request": {
+        "method": "POST",
+        "path": "/v1/chat/completions",
+        "requiredHeaders": ["x-api-key"],
+        "bodyKeys": ["model", "messages", "stream"]
+      },
+      "response": {
+        "status": 200,
+        "contentType": "text/event-stream",
+        "body": "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"index\":0,\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"fixture stream\"},\"index\":0,\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":4,\"completion_tokens\":2,\"total_tokens\":6}}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "name": "usage",
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/usage/dashboard/stats",
+        "requiredHeaders": ["authorization"]
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "data": {
+            "balance": 8.75,
+            "currency": "USD",
+            "used": 3.5,
+            "limit": 20
+          }
+        }
+      }
+    }
+  ]
+}

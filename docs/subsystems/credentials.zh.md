@@ -253,6 +253,112 @@ Host service backing the generated `ctx.remote.credentials` namespace. It carrie
 
 Source: [`packages/api/settings-controller/src/credentials.ts`](../../packages/api/settings-controller/src/credentials.ts)
 
+<a id="ctxsub2api--sub2apiservice"></a>
+
+### `ctx.sub2api` — `Sub2apiService`
+
+Cordis Service Provider that mounts one configured Sub2API runtime.
+
+```ts cordis-catalog
+/**
+ * Read the current secret-free runtime state.
+ * @returns the detached runtime state.
+ */
+state(): Sub2apiStateView
+
+/**
+ * Read normalized deployment facts without any credential value.
+ * @returns the configured protocol profile.
+ */
+profile(): Sub2apiProtocolProfile
+
+/**
+ * Subscribe to account and catalog projections.
+ * @param listener - callback receiving a detached state view.
+ * @returns the subscription disposer.
+ */
+subscribe(listener: (state: Sub2apiStateView) => void): () => void
+
+/**
+ * Load the persisted grant record.
+ * @returns resolution after the record has been validated.
+ */
+hydrate(): Promise<void>
+
+/**
+ * Register an account through the mounted runtime.
+ * @param input - registration fields.
+ * @param signal - optional cancellation signal.
+ * @returns resolution after authentication and key reconciliation.
+ */
+register(input: Sub2apiRegisterInput, signal?: AbortSignal): Promise<void>
+
+/**
+ * Log in an account through the mounted runtime.
+ * @param input - login fields.
+ * @param signal - optional cancellation signal.
+ * @returns resolution after authentication and key reconciliation.
+ */
+login(input: Sub2apiLoginInput, signal?: AbortSignal): Promise<void>
+
+/**
+ * Complete the mounted runtime's pending second-factor challenge.
+ * @param input - second-factor code.
+ * @param signal - optional cancellation signal.
+ * @returns resolution after authentication and key reconciliation.
+ */
+submit2FA(input: Sub2apiTwoFactorInput, signal?: AbortSignal): Promise<void>
+
+/**
+ * Clear local account state while retaining the server-side managed Key.
+ * @returns resolution after local cleanup.
+ */
+logout(): Promise<void>
+
+/**
+ * Refresh and return the current account summary.
+ * @param signal - optional cancellation signal.
+ * @returns the account summary and freshness metadata.
+ */
+refreshAccount(signal?: AbortSignal): Promise<Sub2apiAccountSnapshot>
+
+/**
+ * Refresh and return models visible to the managed API Key.
+ * @param signal - optional cancellation signal.
+ * @returns model descriptors visible to the managed Key.
+ */
+refreshModels(signal?: AbortSignal): Promise<readonly Sub2apiModelDescriptor[]>
+
+/**
+ * Refresh or return the bounded usage and balance snapshot.
+ * @param signal - optional cancellation signal.
+ * @returns usage and balance data with freshness metadata.
+ */
+getUsage(signal?: AbortSignal): Promise<Sub2apiUsageSnapshot>
+
+/**
+ * Return the validated recharge URL, when the profile exposes one.
+ * @param signal - optional cancellation signal.
+ * @returns the approved URL, or `undefined` when the service returned none.
+ */
+getRechargeUrl(signal?: AbortSignal): Promise<string | undefined>
+
+/**
+ * Return the Host-only API Key snapshot for a model provider.
+ * @param signal - optional cancellation signal.
+ * @returns the deployment-bound managed Key snapshot.
+ */
+resolveGatewayCredential(signal?: AbortSignal): Promise<Sub2apiGatewayCredential>
+
+/**
+ * Return the deployment-validated fetch used by the model provider.
+ * @returns a fetch function that applies the runtime destination policy.
+ */
+createValidatedFetch(): typeof globalThis.fetch
+```
+
+Source: [`packages/experimental/sub2api/src/cordis.ts`](../../packages/experimental/sub2api/src/cordis.ts)
+
 <a id="authorization-events"></a>
 
 ### `authorization/*` events
@@ -326,4 +432,25 @@ Committed change to a provider-managed credential source: a `set`, an `unset`, o
 ```
 
 Source: [`packages/credentials/credentials/src/types.ts`](../../packages/credentials/credentials/src/types.ts)
+
+<a id="sub2api-events"></a>
+
+### `sub2api/*` events
+
+<a id="sub2apistate-changed--emit"></a>
+
+#### `sub2api/state-changed` — emit
+
+Secret-free account, usage, and model projection changed.
+
+```ts cordis-catalog
+/**
+ * Secret-free account, usage, and model projection changed.
+ * @mode emit
+ * @param state - detached account, usage, and model state.
+ */
+'sub2api/state-changed'(state: Sub2apiStateView): void
+```
+
+Source: [`packages/experimental/sub2api/src/types.ts`](../../packages/experimental/sub2api/src/types.ts)
 <!-- END GENERATED cordis-surface -->

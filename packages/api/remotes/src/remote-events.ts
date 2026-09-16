@@ -8,6 +8,7 @@
 
 import type {} from '@deepseek-ai/dsh-api-session-controller/remote-events'
 import type { TypertForwardableEventEntry } from '@deepseek-ai/dsh-typert-protocol'
+import type {} from '@deepseek-ai/dsh-experimental-sub2api/types'
 
 /**
  * Host events this application forwards without renaming. The explicit mode is
@@ -32,5 +33,6 @@ export const API_REMOTE_FORWARDED_EVENTS = [
   { event: 'cordis/inspect-query-resolved', mode: 'emit' },
   { event: 'llm/adapters-updated', mode: 'emit' },
   { event: 'settings/document-updated', mode: 'emit' },
+  { event: 'sub2api/state-changed', mode: 'emit' },
   { event: 'user-questions/request', mode: 'waterfall' },
 ] as const satisfies readonly TypertForwardableEventEntry[]

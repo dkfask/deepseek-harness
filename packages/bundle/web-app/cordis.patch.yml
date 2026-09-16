@@ -246,6 +246,10 @@
     - id: ui-settings-plugin-inventory
       name: '@deepseek-ai/dsh-client-ui-settings-plugin-inventory'
 
+    - id: ui-settings-sub2api
+      name: '@deepseek-ai/dsh-client-ui-settings-sub2api'
+      disabled: !!js process.env.DSH_SUB2API_ENABLED !== 'true'
+
     - id: ui-conversation
       name: '@deepseek-ai/dsh-client-ui-conversation'
 
