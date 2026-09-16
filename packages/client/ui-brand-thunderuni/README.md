@@ -67,3 +67,5 @@ None; the package does not participate in model request assembly.
 ### Dev Note
 
 The package remains compatible with the upstream `dsh` launcher and runtime profiles. Brand selection is a client build concern, not a runtime permission or model configuration.
+
+No runtime invariant companion is published because the package retains no mutable state; its three slot occupants install and leave through one transactional effect.

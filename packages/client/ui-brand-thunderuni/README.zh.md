@@ -67,3 +67,5 @@ Web bundle 同时包含本包与官方品牌包。运行 `pnpm run build:thunder
 ### 开发备注
 
 本包保持与上游 `dsh` 启动器及运行时 profile 兼容。品牌选择属于客户端构建配置，不属于运行时权限或模型配置。
+
+不发布 runtime invariant companion，因为本包不保留可变状态；三个 slot occupant 通过一个事务式 effect 安装和退出。

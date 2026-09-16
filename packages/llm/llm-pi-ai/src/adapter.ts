@@ -31,6 +31,7 @@ import type {
   Api,
   AuthContext,
   CredentialStore,
+  FetchFunction,
   Model,
   Models,
   ModelThinkingLevel,
@@ -83,6 +84,23 @@ export interface PiAiAdapterOptions {
    * `MISSING_CREDENTIAL` rather than falling back.
    */
   resolveApiKey: (provider: string, profile: ResolvedPiAiProviderProfile) => Promise<string | undefined>
+  /** Resolve the request's pi-ai key and deployment headers independently. */
+  resolveRequestAuth?: (
+    provider: string,
+    profile: ResolvedPiAiProviderProfile,
+    apiKey: string | undefined,
+  ) => { readonly apiKey?: string; readonly headers?: Readonly<Record<string, string | null>> }
+  /** Add request-scoped auth headers after the credential is resolved. */
+  resolveRequestHeaders?: (
+    provider: string,
+    profile: ResolvedPiAiProviderProfile,
+    apiKey: string | undefined,
+  ) => Readonly<Record<string, string>> | undefined
+  /** Resolve a destination-validated fetch for one provider request. */
+  resolveFetch?: (
+    provider: string,
+    profile: ResolvedPiAiProviderProfile,
+  ) => FetchFunction | undefined
   /**
    * How every collection this adapter builds resolves auth the request-level
    * `apiKey` override does not cover. Required rather than optional: a
@@ -202,7 +220,7 @@ function reasoningInfo(
 }
 
 /** Merge deployment headers while removing case-insensitive attribution collisions. */
-function requestHeaders(headers: Readonly<Record<string, string>> | undefined): Record<string, string> {
+function requestHeaders(headers: Readonly<Record<string, string | null>> | undefined): Record<string, string | null> {
   const attribution = attributionHeaders()
   const reserved = new Set(Object.keys(attribution).map(name => name.toLowerCase()))
   return {
@@ -346,6 +364,14 @@ export class PiAiAdapter extends LlmAdapter {
       options.reasoningEffort ?? profile.reasoning,
     )
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
+    const resolvedAuth = this.config.resolveRequestAuth?.(options.provider, profile, apiKey)
+    const requestApiKey = resolvedAuth !== undefined && Object.hasOwn(resolvedAuth, 'apiKey')
+      ? resolvedAuth.apiKey
+      : apiKey
+    const resolvedHeaders = {
+      ...this.config.resolveRequestHeaders?.(options.provider, profile, apiKey),
+      ...resolvedAuth?.headers,
+    }
 
     const consumer = new AbortController()
     const upstream = options.signal === undefined
@@ -353,6 +379,7 @@ export class PiAiAdapter extends LlmAdapter {
       : AbortSignal.any([options.signal, consumer.signal])
     const streamIdleTimeoutMs = profile.streamIdleTimeoutMs
     using watchdog = idleWatchdog(upstream, streamIdleTimeoutMs, 'LLM_STREAM_IDLE_TIMEOUT')
+    const providerFetch = this.config.resolveFetch?.(options.provider, profile)
 
     try {
       const containsImage = options.messages.some(message => contentHasImage(message.content))
@@ -378,14 +405,15 @@ export class PiAiAdapter extends LlmAdapter {
           },
         }, onReplayDegrade)
       const events = snapshot.models.streamSimple(model, context, {
-        ...profileOptions(profile, reasoning, apiKey),
+        ...profileOptions(profile, reasoning, requestApiKey),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
         signal: watchdog.signal,
         // Profile headers are deployment-owned; attribution names are
         // Harness-owned and therefore win collisions.
-        headers: requestHeaders(profile.headers),
+        headers: requestHeaders({ ...profile.headers, ...resolvedHeaders }),
+        ...providerFetch === undefined ? {} : { fetch: providerFetch },
       })
       const iterator = toStreamChunks(events, model.contextWindow, options.signal, model.id)[Symbol.asyncIterator]()
       let exhausted = false

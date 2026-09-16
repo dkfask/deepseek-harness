@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/cookbook/sub2api-windows-test-handoff.md
+sub2api-windows-test-handoff.md: cdad8c1d3a96e0a6efa75b6039349fc3f6c215a6
+sub2api-windows-test-handoff.zh.md: 21fdcdacf7cae48113df31ee859096c5b7ed8e94

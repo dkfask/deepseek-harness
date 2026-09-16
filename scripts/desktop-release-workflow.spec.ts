@@ -32,8 +32,12 @@ function stepsOf(value: RecordValue): RecordValue[] {
 describe('Windows Desktop release workflow', () => {
   it('is manual, tag-driven, and exposes only the intended release inputs', () => {
     const document = workflow()
-    expect(document.on).toEqual({ workflow_dispatch: { inputs: expect.any(Object) } })
-    const inputs = (document.on as RecordValue).workflow_dispatch as RecordValue
+    expect(isRecord(document.on)).toBe(true)
+    if (!isRecord(document.on)) throw new TypeError('Desktop release workflow must define an on mapping')
+    const workflowDispatch = document.on.workflow_dispatch
+    expect(isRecord(workflowDispatch)).toBe(true)
+    if (!isRecord(workflowDispatch)) throw new TypeError('Desktop release workflow must define workflow_dispatch')
+    const inputs = workflowDispatch
     expect(inputs.inputs).toMatchObject({
       ref: { required: true, type: 'string' },
       profile: { required: true, default: 'thunderuni', type: 'choice', options: ['thunderuni', 'official'] },

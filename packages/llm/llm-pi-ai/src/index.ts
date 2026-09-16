@@ -73,6 +73,8 @@ import { registerPiAiFlows } from './login.ts'
 
 export { PiAiAdapter } from './adapter.ts'
 export type { PiAiAdapterOptions } from './adapter.ts'
+export { createDynamicPiAiProfile } from './dynamic.ts'
+export type { DynamicPiAiModel, DynamicPiAiProfileOptions } from './dynamic.ts'
 export { Config } from './config.ts'
 export type {
   PiAiCompatProfile,
@@ -85,6 +87,8 @@ export type {
   ResolvedPiAiProviderProfile,
 } from './config.ts'
 export { recordKeyFor } from './auth.ts'
+export { authContextFrom, credentialStoreFrom } from './auth.ts'
+export { resolveProfiles } from './config.ts'
 export { supportedProtocols } from './provider.ts'
 
 export const name = 'llm-pi-ai'

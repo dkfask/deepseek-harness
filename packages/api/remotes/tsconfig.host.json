@@ -67,6 +67,9 @@
     },
     {
       "path": "../../typert/protocol"
+    },
+    {
+      "path": "../../experimental/sub2api/tsconfig.host.json"
     }
   ]
 }

@@ -2264,6 +2264,97 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'sub2api',
+    summary: 'Cordis Service Provider that mounts one configured Sub2API runtime.',
+    description: 'Cordis Service Provider that mounts one configured Sub2API runtime.',
+    methods: [
+      {
+        signature: 'state(): Sub2apiStateView',
+        description: 'Read the current secret-free runtime state.',
+        parameters: [],
+        returns: 'the detached runtime state.',
+      },
+      {
+        signature: 'profile(): Sub2apiProtocolProfile',
+        description: 'Read normalized deployment facts without any credential value.',
+        parameters: [],
+        returns: 'the configured protocol profile.',
+      },
+      {
+        signature: 'subscribe(listener: (state: Sub2apiStateView) => void): () => void',
+        description: 'Subscribe to account and catalog projections.',
+        parameters: [{ name: 'listener', description: 'callback receiving a detached state view.' }],
+        returns: 'the subscription disposer.',
+      },
+      {
+        signature: 'hydrate(): Promise<void>',
+        description: 'Load the persisted grant record.',
+        parameters: [],
+        returns: 'resolution after the record has been validated.',
+      },
+      {
+        signature: 'register(input: Sub2apiRegisterInput, signal?: AbortSignal): Promise<void>',
+        description: 'Register an account through the mounted runtime.',
+        parameters: [{ name: 'input', description: 'registration fields.' }, { name: 'signal', description: 'optional cancellation signal.' }],
+        returns: 'resolution after authentication and key reconciliation.',
+      },
+      {
+        signature: 'login(input: Sub2apiLoginInput, signal?: AbortSignal): Promise<void>',
+        description: 'Log in an account through the mounted runtime.',
+        parameters: [{ name: 'input', description: 'login fields.' }, { name: 'signal', description: 'optional cancellation signal.' }],
+        returns: 'resolution after authentication and key reconciliation.',
+      },
+      {
+        signature: 'submit2FA(input: Sub2apiTwoFactorInput, signal?: AbortSignal): Promise<void>',
+        description: 'Complete the mounted runtime\'s pending second-factor challenge.',
+        parameters: [{ name: 'input', description: 'second-factor code.' }, { name: 'signal', description: 'optional cancellation signal.' }],
+        returns: 'resolution after authentication and key reconciliation.',
+      },
+      {
+        signature: 'logout(): Promise<void>',
+        description: 'Clear local account state while retaining the server-side managed Key.',
+        parameters: [],
+        returns: 'resolution after local cleanup.',
+      },
+      {
+        signature: 'refreshAccount(signal?: AbortSignal): Promise<Sub2apiAccountSnapshot>',
+        description: 'Refresh and return the current account summary.',
+        parameters: [{ name: 'signal', description: 'optional cancellation signal.' }],
+        returns: 'the account summary and freshness metadata.',
+      },
+      {
+        signature: 'refreshModels(signal?: AbortSignal): Promise<readonly Sub2apiModelDescriptor[]>',
+        description: 'Refresh and return models visible to the managed API Key.',
+        parameters: [{ name: 'signal', description: 'optional cancellation signal.' }],
+        returns: 'model descriptors visible to the managed Key.',
+      },
+      {
+        signature: 'getUsage(signal?: AbortSignal): Promise<Sub2apiUsageSnapshot>',
+        description: 'Refresh or return the bounded usage and balance snapshot.',
+        parameters: [{ name: 'signal', description: 'optional cancellation signal.' }],
+        returns: 'usage and balance data with freshness metadata.',
+      },
+      {
+        signature: 'getRechargeUrl(signal?: AbortSignal): Promise<string | undefined>',
+        description: 'Return the validated recharge URL, when the profile exposes one.',
+        parameters: [{ name: 'signal', description: 'optional cancellation signal.' }],
+        returns: 'the approved URL, or `undefined` when the service returned none.',
+      },
+      {
+        signature: 'resolveGatewayCredential(signal?: AbortSignal): Promise<Sub2apiGatewayCredential>',
+        description: 'Return the Host-only API Key snapshot for a model provider.',
+        parameters: [{ name: 'signal', description: 'optional cancellation signal.' }],
+        returns: 'the deployment-bound managed Key snapshot.',
+      },
+      {
+        signature: 'createValidatedFetch(): typeof globalThis.fetch',
+        description: 'Return the deployment-validated fetch used by the model provider.',
+        parameters: [],
+        returns: 'a fetch function that applies the runtime destination policy.',
+      },
+    ],
+  },
+  {
     key: 'subagentModelSelection',
     summary: 'Singleton settings owner read when delegation tools are composed for a Session.',
     description: 'Singleton settings owner read when delegation tools are composed for a Session.',
@@ -3401,6 +3492,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'A skill provider, runtime contribution, or provider-backed catalog may have changed.',
     description: 'A skill provider, runtime contribution, or provider-backed catalog may have changed. This is an unfiltered invalidation notification; consumers refetch the catalog for their own lookup options. Listener failures are contained and cannot veto the registry mutation.',
     parameters: [],
+  },
+  {
+    name: 'sub2api/state-changed',
+    mode: 'emit',
+    signature: '\'sub2api/state-changed\'(state: Sub2apiStateView): void',
+    summary: 'Secret-free account, usage, and model projection changed.',
+    description: 'Secret-free account, usage, and model projection changed.',
+    parameters: [{ name: 'state', description: 'detached account, usage, and model state.' }],
   },
   {
     name: 'subagent/end',
@@ -5709,6 +5808,82 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'StreamChunk',
     declaration: 'export type StreamChunk = {\n    type: \'block-start\';\n    index: number;\n    blockType: ContentBlockType;\n} | {\n    type: \'text-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'reasoning-delta\';\n    index: number;\n    text: string;\n} | {\n    type: \'tool-call-delta\';\n    index: number;\n    id: ToolCallId;\n    name?: string;\n    argumentsDelta: string;\n} | {\n    type: \'block-end\';\n    index: number;\n    block: ContentBlock;\n} | {\n    type: \'usage\';\n    usage: TokenUsage;\n} | {\n    type: \'finish\';\n    reason: FinishReason;\n    replayState?: ReplayEnvelope;\n};',
+  },
+  {
+    name: 'Sub2apiAccountPaths',
+    declaration: 'export interface Sub2apiAccountPaths {\n    readonly login: string;\n    readonly register: string;\n    readonly loginTwoFactor?: string;\n    readonly refresh?: string;\n    readonly me: string;\n    readonly apiKeys: string;\n    readonly usage?: string;\n    readonly recharge?: string;\n}',
+  },
+  {
+    name: 'Sub2apiAccountSnapshot',
+    declaration: 'export interface Sub2apiAccountSnapshot {\n    readonly account: Sub2apiAccountSummary;\n    readonly asOf: number;\n    readonly stale: boolean;\n}',
+  },
+  {
+    name: 'Sub2apiAccountSummary',
+    declaration: 'export interface Sub2apiAccountSummary {\n    readonly userId: string;\n    readonly email?: string;\n    readonly displayName?: string;\n}',
+  },
+  {
+    name: 'Sub2apiAuthState',
+    declaration: 'export type Sub2apiAuthState = \'signed-out\' | \'authenticating\' | \'two-factor-required\' | \'authenticated\' | \'refreshing\' | \'reauth-required\' | \'key-required\' | \'insufficient-balance\' | \'signing-out\';',
+  },
+  {
+    name: 'Sub2apiDeploymentFingerprint',
+    declaration: 'export type Sub2apiDeploymentFingerprint = Branded<\'Sub2apiDeploymentFingerprint\'>;',
+  },
+  {
+    name: 'Sub2apiErrorSummary',
+    declaration: 'export interface Sub2apiErrorSummary {\n    readonly code: string;\n    readonly message: string;\n    readonly retryable: boolean;\n    readonly retryAfterMs?: number;\n}',
+  },
+  {
+    name: 'Sub2apiGatewayAuthScheme',
+    declaration: 'export type Sub2apiGatewayAuthScheme = \'api-key\' | \'bearer\' | \'both\';',
+  },
+  {
+    name: 'Sub2apiGatewayCredential',
+    declaration: 'export interface Sub2apiGatewayCredential {\n    readonly deploymentFingerprint: Sub2apiDeploymentFingerprint;\n    readonly generation: number;\n    readonly apiKey: Sub2apiSecret;\n}',
+  },
+  {
+    name: 'Sub2apiGatewayPaths',
+    declaration: 'export interface Sub2apiGatewayPaths {\n    readonly models: string;\n    readonly chatCompletions: string;\n}',
+  },
+  {
+    name: 'Sub2apiLoginInput',
+    declaration: 'export interface Sub2apiLoginInput {\n    readonly email: string;\n    readonly password: string;\n}',
+  },
+  {
+    name: 'Sub2apiModelDescriptor',
+    declaration: 'export interface Sub2apiModelDescriptor {\n    readonly id: string;\n    readonly displayName?: string;\n    readonly endpointFamily: \'chat-completions\' | \'responses\' | \'unknown\';\n    readonly supportsStreaming: \'verified\' | \'unsupported\' | \'unknown\';\n    readonly supportsTools: \'verified\' | \'unsupported\' | \'unknown\';\n    readonly supportsVision: \'verified\' | \'unsupported\' | \'unknown\';\n    readonly supportsReasoning: \'verified\' | \'unsupported\' | \'unknown\';\n    readonly supportsResponses: \'verified\' | \'unsupported\' | \'unknown\';\n    readonly contextWindow?: number;\n    readonly maxOutputTokens?: number;\n    readonly source: \'fixture\' | \'server-metadata\' | \'configured\' | \'unknown\';\n}',
+  },
+  {
+    name: 'Sub2apiProtocolProfile',
+    declaration: 'export interface Sub2apiProtocolProfile {\n    readonly version: string;\n    readonly allowInsecureHttpOrigins: readonly string[];\n    readonly accountBaseUrl: string;\n    readonly gatewayBaseUrl: string;\n    readonly account: {\n        readonly paths: Sub2apiAccountPaths;\n        readonly responseEnvelope: Sub2apiResponseEnvelope;\n    };\n    readonly gateway: {\n        readonly paths: Sub2apiGatewayPaths;\n        readonly responseEnvelope: Sub2apiResponseEnvelope;\n        readonly authScheme: Sub2apiGatewayAuthScheme;\n    };\n}',
+  },
+  {
+    name: 'Sub2apiRegisterInput',
+    declaration: 'export interface Sub2apiRegisterInput {\n    readonly email: string;\n    readonly password: string;\n    readonly captcha?: string;\n    readonly verificationCode?: string;\n}',
+  },
+  {
+    name: 'Sub2apiResponseEnvelope',
+    declaration: 'export type Sub2apiResponseEnvelope = \'direct\' | \'data\' | \'both\';',
+  },
+  {
+    name: 'Sub2apiRuntimeSnapshot',
+    declaration: 'export interface Sub2apiRuntimeSnapshot {\n    readonly status: Sub2apiAuthState;\n    readonly generation: number;\n    readonly account?: Sub2apiAccountSummary;\n    readonly error?: Sub2apiErrorSummary;\n    readonly updatedAt: number;\n}',
+  },
+  {
+    name: 'Sub2apiSecret',
+    declaration: 'export type Sub2apiSecret = Branded<\'Sub2apiSecret\'>;',
+  },
+  {
+    name: 'Sub2apiStateView',
+    declaration: 'export interface Sub2apiStateView extends Sub2apiRuntimeSnapshot {\n    readonly usage?: Sub2apiUsageSnapshot;\n    readonly models?: readonly Sub2apiModelDescriptor[];\n}',
+  },
+  {
+    name: 'Sub2apiTwoFactorInput',
+    declaration: 'export interface Sub2apiTwoFactorInput {\n    readonly code: string;\n}',
+  },
+  {
+    name: 'Sub2apiUsageSnapshot',
+    declaration: 'export interface Sub2apiUsageSnapshot {\n    readonly balance?: number;\n    readonly currency?: string;\n    readonly used?: number;\n    readonly limit?: number;\n    readonly asOf: number;\n    readonly stale: boolean;\n}',
   },
   {
     name: 'SubagentCapabilities',
