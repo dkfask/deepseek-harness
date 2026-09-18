@@ -47,8 +47,20 @@ export interface Sub2apiAccountPaths {
   readonly refresh?: string
   readonly me: string
   readonly apiKeys: string
+  /** Authenticated endpoint returning groups available to the current user. */
+  readonly groupsAvailable?: string
   readonly usage?: string
   readonly recharge?: string
+  /** Unauthenticated deployment capability settings endpoint. */
+  readonly publicSettings?: string
+}
+
+/** Secret-free group metadata returned by the authenticated account API. */
+export interface Sub2apiGroupDescriptor {
+  readonly id: number
+  readonly name: string
+  readonly platform?: string
+  readonly status?: string
 }
 
 /** Gateway endpoint paths relative to the configured model API base. */
@@ -83,13 +95,23 @@ export interface Sub2apiAccountSummary {
   readonly userId: string
   readonly email?: string
   readonly displayName?: string
+  /** Account balance returned by deployments that include it in `/auth/me`. */
+  readonly balance?: number
+}
+
+/** Safe metadata returned when a Sub2API administrator must acknowledge deployment terms. */
+export interface Sub2apiComplianceRequirement {
+  readonly version?: string
+  readonly documentUrlZh?: string
+  readonly documentUrlEn?: string
+  readonly ackPhraseZh?: string
+  readonly ackPhraseEn?: string
 }
 
 /** Credentials accepted by a Sub2API registration request. */
 export interface Sub2apiRegisterInput {
   readonly email: string
   readonly password: string
-  readonly captcha?: string
   readonly verificationCode?: string
 }
 
@@ -128,6 +150,8 @@ export interface Sub2apiApiKeyDescriptor {
   readonly id?: string
   readonly name: string
   readonly active: boolean
+  /** Server-side group that routes this key's gateway traffic. */
+  readonly groupId?: number | null
   readonly createdAt?: number
   readonly fingerprint?: string
   readonly secret?: Sub2apiSecret
@@ -148,6 +172,12 @@ export interface Sub2apiModelDescriptor {
   readonly source: 'fixture' | 'server-metadata' | 'configured' | 'unknown'
 }
 
+/** One model-capacity setting submitted by the model settings card. */
+export interface Sub2apiModelSettingsInput {
+  readonly modelId: string
+  readonly contextWindow: number
+}
+
 /** Account balance and usage data safe for UI and Remote projections. */
 export interface Sub2apiUsageSnapshot {
   readonly balance?: number
@@ -156,6 +186,27 @@ export interface Sub2apiUsageSnapshot {
   readonly limit?: number
   readonly asOf: number
   readonly stale: boolean
+}
+
+/** Non-secret metadata for the account's managed gateway API Key. */
+export interface Sub2apiApiKeyView {
+  readonly id?: string
+  readonly name: string
+  readonly active: boolean
+  readonly groupId?: number | null
+  readonly createdAt?: number
+  readonly fingerprint?: string
+}
+
+/** Public deployment capabilities used to gate account and billing controls. */
+export interface Sub2apiPublicSettings {
+  readonly registrationEnabled?: boolean
+  readonly emailVerifyEnabled?: boolean
+  readonly totpEnabled?: boolean
+  readonly paymentEnabled?: boolean
+  readonly subscriptionEnabled?: boolean
+  readonly paymentBalanceDisabled?: boolean
+  readonly rechargeUrl?: string
 }
 
 /** Host-only API Key snapshot used by a model gateway request. */
@@ -176,6 +227,8 @@ export interface Sub2apiAccountSnapshot {
 export interface Sub2apiStateView extends Sub2apiRuntimeSnapshot {
   readonly usage?: Sub2apiUsageSnapshot
   readonly models?: readonly Sub2apiModelDescriptor[]
+  /** Managed gateway Key metadata; its secret never crosses the Host/Remote face. */
+  readonly apiKey?: Sub2apiApiKeyView
 }
 
 /** Redacted view of the durable grant; no token or key secret crosses this type. */
@@ -192,6 +245,7 @@ export interface Sub2apiGrantRecordRedacted {
   readonly apiKey: {
     readonly id?: string
     readonly name: string
+    readonly groupId?: number
     readonly fingerprint?: string
     readonly createdAt?: number
     readonly configured: true
@@ -216,6 +270,7 @@ export interface Sub2apiGrantRecordV1 {
   readonly apiKey: {
     readonly id?: string
     readonly name: string
+    readonly groupId?: number
     readonly secret: Sub2apiSecret
     readonly fingerprint?: string
     readonly createdAt?: number
@@ -230,6 +285,7 @@ export interface Sub2apiErrorSummary {
   readonly message: string
   readonly retryable: boolean
   readonly retryAfterMs?: number
+  readonly compliance?: Sub2apiComplianceRequirement
 }
 
 /** The Host state that can be projected without exposing a credential value. */
@@ -264,6 +320,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
       readonly retryable: boolean
       readonly httpStatus?: number
       readonly retryAfterMs?: number
+      readonly compliance?: Sub2apiComplianceRequirement
     }
   }
 }

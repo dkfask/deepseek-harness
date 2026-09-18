@@ -20,15 +20,19 @@ export function sub2apiSecret(value: string): Sub2apiSecret {
 /**
  * Parse one durable JSON value into the version-one grant record.
  * @param value - untrusted durable value.
+ * @param allowInsecureHttpOrigins - exact development origins allowed by the active profile.
  * @returns the validated version-one grant record.
  */
-export function parseSub2apiGrantRecord(value: unknown): Sub2apiGrantRecordV1 {
+export function parseSub2apiGrantRecord(
+  value: unknown,
+  allowInsecureHttpOrigins: readonly string[] = [],
+): Sub2apiGrantRecordV1 {
   if (!isRecord(value) || value.version !== 1) throw recordError('record version is unsupported')
   const deployment = requireRecord(value.deployment, 'deployment')
   const account = requireRecord(value.account, 'account')
   const auth = requireRecord(value.auth, 'auth')
   const apiKey = requireRecord(value.apiKey, 'apiKey')
-  const origin = normalizeSub2apiOrigin(requireString(deployment.origin, 'deployment.origin'))
+  const origin = normalizeSub2apiOrigin(requireString(deployment.origin, 'deployment.origin'), allowInsecureHttpOrigins)
   const fingerprint = sub2apiDeploymentFingerprint(requireString(deployment.fingerprint, 'deployment.fingerprint'))
   const userId = requireString(account.userId, 'account.userId')
   const email = optionalString(account.email, 'account.email')
@@ -38,6 +42,7 @@ export function parseSub2apiGrantRecord(value: unknown): Sub2apiGrantRecordV1 {
   const lastRefreshAt = optionalInteger(auth.lastRefreshAt, 'auth.lastRefreshAt')
   const secret = sub2apiSecret(requireString(apiKey.secret, 'apiKey.secret'))
   const id = optionalString(apiKey.id, 'apiKey.id')
+  const groupId = optionalPositiveInteger(apiKey.groupId, 'apiKey.groupId')
   const apiKeyFingerprint = optionalString(apiKey.fingerprint, 'apiKey.fingerprint')
   const createdAt = optionalInteger(apiKey.createdAt, 'apiKey.createdAt')
   const record: Sub2apiGrantRecordV1 = {
@@ -56,6 +61,7 @@ export function parseSub2apiGrantRecord(value: unknown): Sub2apiGrantRecordV1 {
     apiKey: {
       ...(id === undefined ? {} : { id }),
       name: requireString(apiKey.name, 'apiKey.name'),
+      ...(groupId === undefined ? {} : { groupId }),
       secret,
       ...(apiKeyFingerprint === undefined ? {} : { fingerprint: apiKeyFingerprint }),
       ...(createdAt === undefined ? {} : { createdAt }),
@@ -80,6 +86,7 @@ export function redactSub2apiGrantRecord(record: Sub2apiGrantRecordV1): Sub2apiG
     apiKey: {
       ...(record.apiKey.id === undefined ? {} : { id: record.apiKey.id }),
       name: record.apiKey.name,
+      ...(record.apiKey.groupId === undefined ? {} : { groupId: record.apiKey.groupId }),
       ...(record.apiKey.fingerprint === undefined ? {} : { fingerprint: record.apiKey.fingerprint }),
       ...(record.apiKey.createdAt === undefined ? {} : { createdAt: record.apiKey.createdAt }),
       configured: true,
@@ -116,6 +123,12 @@ function requireInteger(value: unknown, field: string): number {
 function optionalInteger(value: unknown, field: string): number | undefined {
   if (value === undefined) return undefined
   return requireInteger(value, field)
+}
+
+function optionalPositiveInteger(value: unknown, field: string): number | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) throw recordError(`${field} must be a positive integer`)
+  return value
 }
 
 function recordError(message: string): Sub2apiError {

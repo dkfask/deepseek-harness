@@ -123,6 +123,8 @@ export interface SettingsHeaderOwnerProps {
 export interface SettingsSectionOwnerProps {
   /** Close the settings panel (the shell owns the open state). */
   close: () => void
+  /** Select another settings section without closing the panel. */
+  openSection?: (id: string) => void
 }
 
 /** Owner share of the currently active settings-backed onboarding step. */

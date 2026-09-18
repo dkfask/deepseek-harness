@@ -7,6 +7,7 @@
  * packages/client/AGENTS.md.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 // Type-only: pulls the shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
@@ -66,13 +67,24 @@ export const inject = [
   'settingsScope', 'settingsSchema',
 ]
 
+/** Deployment-owned onboarding controls for the Models page. */
+export interface Config {
+  /** Register the internal-testing and official-provider first-run dialogs. */
+  onboarding?: boolean
+}
+
+/** Validated Models-page configuration. */
+export const Config: z<Config> = z.object({
+  onboarding: z.boolean().default(true),
+})
+
 /**
  * Register the Models section once the `settings.section` declaration is on
  * the ledger, wire its store to the connection, and keep it fresh on every
  * pushed invalidation (settings, credentials, or provider topology).
  * @param ctx - client root context.
  */
-export function apply(ctx: ClientContext): void {
+export function apply(ctx: ClientContext, config: Config = Config({})): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-models: copy dictionaries')
 
   const schema = createSettingsSchemaOperations(ctx.settingsSchema)
@@ -139,16 +151,18 @@ export function apply(ctx: ClientContext): void {
       'settings.models.footer': { kind: 'list', scope: 'root' },
     },
   }, ModelsSection))
-  ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
-    name: 'settings.onboarding',
-    id: 'welcome-notice',
-    order: -100,
-    inject: welcomeInjected,
-  }, WelcomeNotice))
-  ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
-    name: 'settings.onboarding',
-    id: 'deepseek-official',
-    order: 0,
-    inject: deepSeekOnboardingInjected,
-  }, DeepSeekOnboardingDialog))
+  if (config.onboarding !== false) {
+    ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
+      name: 'settings.onboarding',
+      id: 'welcome-notice',
+      order: -100,
+      inject: welcomeInjected,
+    }, WelcomeNotice))
+    ctx.slots.inject('settings.onboarding', () => ctx.slots.register({
+      name: 'settings.onboarding',
+      id: 'deepseek-official',
+      order: 0,
+      inject: deepSeekOnboardingInjected,
+    }, DeepSeekOnboardingDialog))
+  }
 }

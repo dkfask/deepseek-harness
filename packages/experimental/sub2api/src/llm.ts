@@ -23,10 +23,16 @@ export interface Sub2apiLlmOptions {
   readonly responsesEnabled?: boolean
   /** Allow model tool schemas only after each advertised model is verified. */
   readonly toolsEnabled?: boolean
+  /** Model ids with independently verified tool-call support when metadata is unknown. */
+  readonly verifiedToolsModels?: readonly string[]
   /** Explicit capacity used only when gateway metadata omits it. */
   readonly defaultContextWindow?: number
   /** Explicit output capacity used only when gateway metadata omits it. */
   readonly defaultMaxTokens?: number
+  /** Treat model rows without an endpoint marker as verified Chat Completions rows. */
+  readonly verifiedChatCompletions?: boolean
+  /** Treat model rows without a streaming marker as verified SSE rows. */
+  readonly verifiedStreaming?: boolean
   /** Provider retry policy captured by the LLM registry. */
   readonly retryPolicy?: RetryPolicyConfig
 }
@@ -128,7 +134,7 @@ class Sub2apiLlmAdapter extends LlmAdapter {
         throw new LlmError('Sub2API tools are disabled until a tool-capability fixture is verified', 'UNSUPPORTED_OPTION')
       }
       const descriptor = this.runtime.state().models?.find(model => model.id === options.model)
-      if (descriptor?.supportsTools !== 'verified') {
+      if (descriptor?.supportsTools !== 'verified' && !this.options.verifiedToolsModels?.includes(options.model)) {
         throw new LlmError(`Sub2API model "${options.model}" has no verified tool support`, 'UNSUPPORTED_OPTION')
       }
     }
@@ -156,7 +162,7 @@ function profilesOf(runtime: Sub2apiRuntime, options: Sub2apiLlmOptions): Readon
     }))
   const profile = createDynamicPiAiProfile({
     provider: 'sub2api',
-    displayName: 'Sub2API',
+    displayName: 'ThunderUni',
     api: 'openai-completions',
     baseURL: gatewayApiBaseUrl(protocol),
     models,
@@ -168,8 +174,10 @@ function profilesOf(runtime: Sub2apiRuntime, options: Sub2apiLlmOptions): Readon
 }
 
 function isChatModel(descriptor: Sub2apiModelDescriptor, options: Sub2apiLlmOptions): boolean {
-  if (descriptor.endpointFamily !== 'chat-completions') return false
-  if (descriptor.supportsStreaming !== 'verified') return false
+  if (descriptor.endpointFamily !== 'chat-completions'
+    && !(descriptor.endpointFamily === 'unknown' && options.verifiedChatCompletions === true)) return false
+  if (descriptor.supportsStreaming !== 'verified'
+    && !(descriptor.supportsStreaming === 'unknown' && options.verifiedStreaming === true)) return false
   if (descriptor.contextWindow === undefined && options.defaultContextWindow === undefined) return false
   if (descriptor.maxOutputTokens === undefined && options.defaultMaxTokens === undefined) return false
   return true
@@ -214,6 +222,7 @@ function toLlmError(error: unknown): LlmError {
     case 'SUB2API_2FA_REQUIRED':
     case 'SUB2API_2FA_UNSUPPORTED':
     case 'SUB2API_ACCOUNT_UNAVAILABLE':
-    case 'SUB2API_RECHARGE_UNAVAILABLE': return new LlmError(error.message, 'PROVIDER_ERROR', options)
+    case 'SUB2API_RECHARGE_UNAVAILABLE':
+    case 'SUB2API_ADMIN_COMPLIANCE_REQUIRED': return new LlmError(error.message, 'PROVIDER_ERROR', options)
   }
 }

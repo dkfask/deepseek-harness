@@ -16,6 +16,28 @@ function directory(models: () => Promise<unknown>): ModelCatalogDirectory {
 }
 
 describe('ModelCatalogDirectory', () => {
+  it('hides the built-in DeepSeek route and adopts the first Sub2API model', async () => {
+    const subject = directory(() => Promise.resolve({
+      ok: true as const,
+      value: {
+        default: { provider: 'deepseek-official', model: 'deepseek-v4-flash' },
+        routableProviders: ['deepseek-official', 'sub2api'],
+        groups: [
+          { id: 'deepseek-official', name: 'DeepSeek', models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash' }] },
+          { id: 'sub2api', name: 'ThunderUni', models: [{ id: 'thunder-model', name: 'Thunder Model' }] },
+        ],
+        failures: [{ id: 'deepseek-official', name: 'DeepSeek', message: 'missing key' }],
+      },
+    }))
+
+    await expect(subject.load()).resolves.toMatchObject({
+      default: { provider: 'sub2api', model: 'thunder-model' },
+      routableProviders: ['sub2api'],
+      groups: [{ id: 'sub2api' }],
+      failures: [],
+    })
+  })
+
   it('shares one failing request, exposes the RPC error, and permits a retry', async () => {
     const models = vi.fn()
       .mockResolvedValueOnce({

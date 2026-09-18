@@ -15,6 +15,13 @@ describe('desktop locale dictionaries', () => {
       .toBe('plugin@1.2.3 {missing}')
   })
 
+  it('uses the ThunderUni brand in shell loading and recovery copy', () => {
+    const locale = resolveDesktopLocale('zh-CN', 'thunderuni')
+    expect(locale.messages.startupLoading).toBe('正在启动 ThunderUni…')
+    expect(locale.messages.startupFailed).toBe('ThunderUni 无法启动')
+    expect(locale.messages.pluginWindowTitle).toBe('ThunderUni — 桌面插件')
+  })
+
   it('keeps visible plugin-manager HTML copy in the locale dictionaries', () => {
     const html = readFileSync(new URL('../renderer/plugin-manager.html', import.meta.url), 'utf8')
     const staticText = [...html.matchAll(/>([^<]*\p{L}[^<]*)</gu)].map(match => match[1]?.trim())

@@ -9,7 +9,7 @@ kind: "package-bundle"
 
 ## 概述
 
-每个基于 base 的 `dsh --profile` 表层都运行在 `dsh-base` 上，因此这些表层共享模型连接、完整工具集、持久会话历史和 workspace 安全默认值。随附的 `sdk-minimal` profile 刻意改用完整的独立配置树。你通常不直接操作本组合包——随发行版交付的基于 base 的 profile 已经包含它，自定义的基于 base 的 profile 则把它放在第一位。需要其他默认值时，应修改自己的 profile patch 或添加后续组合包；本包不是供导入的库。
+每个基于 base 的 `dsh --profile` 表层都共享模型访问、工具、持久会话、workspace 安全默认值和可选的 Sub2API 账户 service。随附的 `sdk-minimal` profile 使用独立配置树。随发行版交付的 profile 已经包含本组合包；自定义的基于 base 的 profile 把它列在第一位。Sub2API 行只有在 `DSH_SUB2API_ENABLED=true` 时才启用，并且部署必须显式提供 URL、传输上限和已核验模型能力。需要其他默认值时，应添加后续组合包或修改 profile patch；不要把本包作为库导入。
 
 ## 目录
 
@@ -25,7 +25,7 @@ kind: "package-bundle"
 <a id="use-this-package"></a>
 ## 使用本包
 
-你会自动获得 dsh 核心：随发行版交付的 `web`、`headless`、`sdk` 与 `acp` profile 已包含它，自定义 profile 则把它列为第一个组合包。之后一切无需任何额外配置即可工作。
+你会自动获得 dsh 核心：随发行版交付的 `web`、`headless`、`sdk` 与 `acp` profile 已包含它，自定义 profile 则把它列为第一个组合包。之后一切无需任何额外配置即可工作。实验性 Sub2API service 已位于共享 base 层，但在 `DSH_SUB2API_ENABLED=true` 之前保持休眠；选定环境仍必须提供部署 profile，并且只开启已核验的模型能力。
 
 ### 最小自定义 profile
 

@@ -1,4 +1,10 @@
 /* ThunderUni wordmark styling follows the sidebar's inherited color tokens. */
+.mark {
+  display: block;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
 .name {
   color: inherit;
   font-size: 15px;

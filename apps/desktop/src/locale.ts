@@ -105,17 +105,34 @@ export const zh = {
   loadingPlugins: '正在读取桌面插件…',
 } as const satisfies DesktopMessages
 
+/** Desktop shell brand selected by the packaged client profile. */
+export type DesktopBrand = 'official' | 'thunderuni'
+
 /** Locale payload exposed to the Desktop-owned renderer. */
 export interface DesktopLocale {
   readonly id: 'en' | 'zh-CN'
   readonly messages: DesktopMessages
 }
 
-/** Resolve Electron's locale to one shipped Desktop dictionary. */
-export function resolveDesktopLocale(locale: string): DesktopLocale {
-  return locale.toLowerCase().startsWith('zh')
-    ? { id: 'zh-CN', messages: zh }
-    : { id: 'en', messages: en }
+/** Resolve Electron's locale and packaged profile to one shipped Desktop dictionary. */
+export function resolveDesktopLocale(locale: string, brand: DesktopBrand = 'official'): DesktopLocale {
+  const resolved = locale.toLowerCase().startsWith('zh')
+    ? { id: 'zh-CN' as const, messages: zh }
+    : { id: 'en' as const, messages: en }
+  return brand === 'thunderuni'
+    ? { ...resolved, messages: withDesktopBrand(resolved.messages, 'ThunderUni') }
+    : resolved
+}
+
+function withDesktopBrand(messages: DesktopMessages, brand: string): DesktopMessages {
+  return {
+    ...messages,
+    startupFailed: messages.startupFailed.replaceAll('DeepSeek Harness', brand),
+    startupLoading: messages.startupLoading.replaceAll('DeepSeek Harness', brand),
+    updateTitle: messages.updateTitle.replaceAll('DeepSeek Harness', brand),
+    updateDetail: messages.updateDetail.replaceAll('DeepSeek Harness', brand),
+    pluginWindowTitle: messages.pluginWindowTitle.replaceAll('DeepSeek Harness', brand),
+  }
 }
 
 /** Replace named placeholders in one locale-owned message. */

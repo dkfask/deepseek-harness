@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/cookbook/sub2api-windows-test-handoff.md
-sub2api-windows-test-handoff.md: cdad8c1d3a96e0a6efa75b6039349fc3f6c215a6
-sub2api-windows-test-handoff.zh.md: 21fdcdacf7cae48113df31ee859096c5b7ed8e94
+sub2api-windows-test-handoff.md: 090ba427621ca8395ece09697a4896fae5a8b9f3
+sub2api-windows-test-handoff.zh.md: 5ab50b450a01dd1bf8f86478d906df3b0c7ec9ec

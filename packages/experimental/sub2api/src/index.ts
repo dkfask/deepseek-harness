@@ -9,7 +9,16 @@ export {
   sub2apiFixtureJson,
 } from './fixtures.ts'
 export { Sub2apiHttpClient } from './http.ts'
+export {
+  SUB2API_MODEL_SETTINGS_NAMESPACE,
+  Sub2apiModelSettingsSchema,
+} from './model-settings.ts'
 export { isSub2apiRecord, parseSub2apiPayload } from './protocol.ts'
+export type {
+  Sub2apiModelOverride,
+  Sub2apiModelSettings,
+  Sub2apiModelSettingsStore,
+} from './model-settings.ts'
 export type {
   Sub2apiFixtureDocument,
   Sub2apiFixtureExchange,
@@ -42,13 +51,16 @@ export {
   Sub2apiRuntimeService,
 } from './service.ts'
 export { Sub2apiService } from './cordis.ts'
+export { default } from './cordis.ts'
 export { Sub2apiLlmProvider } from './llm.ts'
 export { Sub2apiRemoteController } from './remote.ts'
-export { parseSub2apiCompatibilityMatrix, SUB2API_LOCKED_BASELINE } from './compatibility.ts'
+export { parseSub2apiCompatibilityMatrix, parseSub2apiTargetEvidence, SUB2API_LOCKED_BASELINE } from './compatibility.ts'
 export type {
   Sub2apiCompatibilityMatrix,
   Sub2apiCompatibilityRow,
   Sub2apiCompatibilityStatus,
+  Sub2apiTargetEvidence,
+  Sub2apiTargetEvidenceObservation,
 } from './compatibility.ts'
 export type {
   Sub2apiCredentialStore,
@@ -62,6 +74,8 @@ export type {
   Sub2apiAccountPaths,
   Sub2apiAccountSnapshot,
   Sub2apiAccountSummary,
+  Sub2apiApiKeyView,
+  Sub2apiComplianceRequirement,
   Sub2apiApiKeyDescriptor,
   Sub2apiAuthenticationGrant,
   Sub2apiAuthenticationResult,
@@ -70,11 +84,14 @@ export type {
   Sub2apiGatewayAuthScheme,
   Sub2apiGatewayPaths,
   Sub2apiGatewayCredential,
+  Sub2apiGroupDescriptor,
   Sub2apiGrantRecordRedacted,
   Sub2apiGrantRecordV1,
   Sub2apiLoginInput,
   Sub2apiModelDescriptor,
+  Sub2apiModelSettingsInput,
   Sub2apiProtocolProfile,
+  Sub2apiPublicSettings,
   Sub2apiRegisterInput,
   Sub2apiResponseEnvelope,
   Sub2apiRuntimeSnapshot,

@@ -337,6 +337,13 @@ refreshModels(signal?: AbortSignal): Promise<readonly Sub2apiModelDescriptor[]>
 getUsage(signal?: AbortSignal): Promise<Sub2apiUsageSnapshot>
 
 /**
+ * Read unauthenticated deployment capability settings.
+ * @param signal - optional cancellation signal for the public-settings request.
+ * @returns public settings, or `undefined` when the profile has no endpoint.
+ */
+getPublicSettings(signal?: AbortSignal): Promise<Sub2apiPublicSettings | undefined>
+
+/**
  * Return the validated recharge URL, when the profile exposes one.
  * @param signal - optional cancellation signal.
  * @returns the approved URL, or `undefined` when the service returned none.

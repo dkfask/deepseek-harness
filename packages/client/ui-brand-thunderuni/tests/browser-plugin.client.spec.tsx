@@ -5,7 +5,8 @@ import { cleanup, render } from '@testing-library/react'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { apply, inject } from '../src/client/index.ts'
-import { ThunderUniBrandMark, ThunderUniBrandName } from '../src/client/Brand.tsx'
+import { ThunderUniBrandMark, ThunderUniBrandName, ThunderUniHeroBrandMark } from '../src/client/Brand.tsx'
+import { THUNDERUNI_LOGO_DATA_URI } from '../src/client/logo.ts'
 import { apply as hostApply } from '../src/index.ts'
 
 afterEach(() => {
@@ -13,7 +14,7 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-const HOLES = ['sidebar.brand.mark', 'sidebar.brand.name'] as const
+const HOLES = ['sidebar.brand.mark', 'sidebar.brand.name', 'conversation.hero.brand.mark'] as const
 
 async function bench(declare = true) {
   const ctx = new Context()
@@ -72,8 +73,14 @@ describe('ThunderUni browser-brand plugin', () => {
 
   it('renders the mark at the requested size and the localized name', () => {
     const mark = render(<ThunderUniBrandMark size={34} />)
-    expect(mark.container.querySelector('svg')?.getAttribute('width')).toBe('34')
+    expect(mark.container.querySelector('img')).toMatchObject({ width: 34, height: 34 })
+    expect(mark.container.querySelector('img')?.getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/u)
     mark.unmount()
+
+    const heroMark = render(<ThunderUniHeroBrandMark size={34} className="hero-mark" />)
+    expect(heroMark.container.querySelector('img')).toMatchObject({ width: 34, height: 34, className: 'hero-mark' })
+    expect(heroMark.container.querySelector('img')?.getAttribute('src')).toBe(THUNDERUNI_LOGO_DATA_URI)
+    heroMark.unmount()
 
     const name = render(<ThunderUniBrandName t={() => 'ThunderUni'} />)
     expect(name.getByText('ThunderUni')).toBeTruthy()

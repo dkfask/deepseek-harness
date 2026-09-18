@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "lockedBaseline": "881f3202694c6bc932446931a30c27d9675178b9",
+  "targetDeployment": "weishaw/sub2api:latest; version=0.2.5; image=sha256:5d5c2cdd45e8c944fec9aa5d379b5361f704dfcdf6d3be4f3446242d2e133cc2; revision=86f93c28ee34cc74b629dafb748bd5ac5ca8c5ea",
+  "observations": [
+    { "capability": "login", "request": { "method": "POST", "path": "/api/v1/auth/login" }, "status": 200, "response": { "topLevelFields": ["code", "message", "data"], "dataFields": ["access_token", "refresh_token", "expires_in", "token_type", "user"] } },
+    { "capability": "access-token", "request": { "method": "POST", "path": "/api/v1/auth/login" }, "status": 200, "response": { "topLevelFields": ["code", "message", "data"], "dataFields": ["access_token", "token_type"] } },
+    { "capability": "token-expiry", "request": { "method": "POST", "path": "/api/v1/auth/login" }, "status": 200, "response": { "topLevelFields": ["code", "message", "data"], "dataFields": ["expires_in"] } },
+    { "capability": "refresh-token", "request": { "method": "POST", "path": "/api/v1/auth/refresh" }, "status": 200, "response": { "topLevelFields": ["code", "message", "data"], "dataFields": ["access_token", "refresh_token", "expires_in", "token_type"] } },
+    { "capability": "current-user", "request": { "method": "GET", "path": "/api/v1/auth/me" }, "status": 200, "response": { "topLevelFields": ["code", "message", "data"], "dataFields": ["id", "email", "username", "role", "balance", "status"] } },
+    { "capability": "api-key-list", "request": { "method": "GET", "path": "/api/v1/keys" }, "status": 200, "response": { "topLevelFields": ["code", "message", "data"] } },
+    { "capability": "api-key-create", "request": { "method": "POST", "path": "/api/v1/keys" }, "status": 200, "response": { "topLevelFields": ["code", "message", "data"], "dataFields": ["id", "name", "key", "active", "group_id"] } },
+    { "capability": "usage", "request": { "method": "GET", "path": "/api/v1/usage/dashboard/stats" }, "status": 200, "response": { "topLevelFields": ["code", "message", "data"], "dataFields": ["total_requests", "total_cost", "total_actual_cost", "today_requests"] } },
+    { "capability": "models", "request": { "method": "GET", "path": "/v1/models" }, "status": 200, "response": { "topLevelFields": ["object", "data"], "itemCount": 17 } },
+    { "capability": "gateway-auth", "request": { "method": "GET", "path": "/v1/models" }, "status": 200, "response": { "topLevelFields": ["object", "data"] } },
+    { "capability": "chat-completions", "request": { "method": "POST", "path": "/v1/chat/completions" }, "status": 200, "response": { "topLevelFields": ["id", "object", "created", "model", "choices", "usage"] } },
+    { "capability": "chat-completions-sse", "request": { "method": "POST", "path": "/v1/chat/completions" }, "status": 200, "response": { "contentType": "text/event-stream", "topLevelFields": [], "streamTerminated": true } }
+  ]
+}

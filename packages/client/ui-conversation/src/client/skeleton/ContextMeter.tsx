@@ -24,6 +24,15 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS
  */
 const READING_SLOT = '\u0000'
 
+/** Browser-only notification emitted when a live provider model capacity changes. */
+const MODEL_CONTEXT_UPDATED_EVENT = 'dsh:sub2api-model-context-updated'
+
+interface ModelContextOverride {
+  readonly provider: string
+  readonly model: string
+  readonly contextWindow: number
+}
+
 /** Panel legend rows, in bar-segment order; each color class carries the shared swatch/segment tint. */
 const ROWS = [
   { key: 'systemTokens', label: 'context.system', color: css.colorSystem },
@@ -55,9 +64,34 @@ export interface ContextMeterProps {
 export function ContextMeter({ useProjection, t }: ContextMeterProps) {
   const pressure = useProjection('contextPressure')
   const breakdown = useProjection('contextBreakdown')
+  const selection = useProjection('modelSelection') as { readonly next?: { readonly provider: string; readonly model: string } | null; readonly lastUsed?: { readonly provider: string; readonly model: string } | null } | undefined
+  const [contextOverride, setContextOverride] = useState<ModelContextOverride | undefined>()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLSpanElement | null>(null)
-  const context = contextOccupancy(pressure)
+  const selected = selection?.next ?? selection?.lastUsed
+  useEffect(() => {
+    const onModelContextUpdated = (event: Event): void => {
+      const detail = (event as CustomEvent<unknown>).detail
+      if (!isModelContextOverride(detail)) return
+      setContextOverride(detail)
+    }
+    window.addEventListener(MODEL_CONTEXT_UPDATED_EVENT, onModelContextUpdated)
+    return () => { window.removeEventListener(MODEL_CONTEXT_UPDATED_EVENT, onModelContextUpdated) }
+  }, [])
+  useEffect(() => {
+    if (contextOverride === undefined) return
+    if (selected?.provider !== contextOverride.provider || selected.model !== contextOverride.model) {
+      setContextOverride(undefined)
+    }
+  }, [contextOverride, selected?.model, selected?.provider])
+  const activeOverride = contextOverride !== undefined
+    && selected?.provider === contextOverride.provider
+    && selected.model === contextOverride.model
+    ? contextOverride
+    : undefined
+  const context = contextOccupancy(activeOverride === undefined || pressure === undefined
+    ? pressure
+    : { ...pressure, contextWindow: activeOverride.contextWindow })
   const available = context !== null
 
   // A model switch can temporarily remove capacity while this component stays
@@ -167,4 +201,15 @@ export function ContextMeter({ useProjection, t }: ContextMeterProps) {
       )}
     </span>
   )
+}
+
+function isModelContextOverride(value: unknown): value is ModelContextOverride {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Record<string, unknown>
+  return candidate['provider'] === 'sub2api'
+    && typeof candidate['model'] === 'string'
+    && candidate['model'].length > 0
+    && typeof candidate['contextWindow'] === 'number'
+    && Number.isSafeInteger(candidate['contextWindow'])
+    && candidate['contextWindow'] > 0
 }

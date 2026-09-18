@@ -1,0 +1,177 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <!-- Background -->
+    <radialGradient id="bgGlow" cx="50%" cy="36%" r="75%">
+      <stop offset="0%" stop-color="#12366F"/>
+      <stop offset="48%" stop-color="#071C42"/>
+      <stop offset="100%" stop-color="#020A1D"/>
+    </radialGradient>
+
+    <!-- Border -->
+    <linearGradient id="borderGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#43E7FF"/>
+      <stop offset="42%" stop-color="#2677FF"/>
+      <stop offset="78%" stop-color="#7B5CFF"/>
+      <stop offset="100%" stop-color="#AE5BFF"/>
+    </linearGradient>
+
+    <!-- Main symbol -->
+    <linearGradient id="metalGrad" x1="0" y1="0" x2="0.95" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="38%" stop-color="#EAF5FF"/>
+      <stop offset="70%" stop-color="#C9DEFF"/>
+      <stop offset="100%" stop-color="#B9C9F4"/>
+    </linearGradient>
+
+    <linearGradient id="boltGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F8FFFF"/>
+      <stop offset="48%" stop-color="#A9F7FF"/>
+      <stop offset="100%" stop-color="#55D8FF"/>
+    </linearGradient>
+
+    <!-- Glows -->
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="13" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="strongGlow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="22" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="0 0 0 0 0.18
+                0 0 0 0 0.72
+                0 0 0 0 1
+                0 0 0 0.95 0"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="drop3d" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#00102D" flood-opacity="0.7"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="10" flood-color="#21CFFF" flood-opacity="0.35"/>
+    </filter>
+
+    <!-- subtle highlight -->
+    <linearGradient id="highlightGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- App icon background -->
+  <rect x="78" y="78" width="868" height="868" rx="220" fill="url(#bgGlow)"/>
+
+  <!-- soft ambient light -->
+  <ellipse cx="510" cy="395" rx="320" ry="260" fill="#165CB4" opacity="0.10"/>
+  <ellipse cx="664" cy="515" rx="220" ry="220" fill="#694DFF" opacity="0.07"/>
+
+  <!-- neon border glow -->
+  <rect x="80" y="80" width="864" height="864" rx="218"
+        fill="none" stroke="url(#borderGrad)" stroke-width="10" opacity="0.22"
+        filter="url(#softGlow)"/>
+  <rect x="90" y="90" width="844" height="844" rx="208"
+        fill="none" stroke="url(#borderGrad)" stroke-width="6" opacity="0.95"/>
+
+  <!-- top glass highlight -->
+  <path d="M178 122 H844 Q902 122 916 184"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="7" stroke-linecap="round"/>
+
+  <!-- Cyan halo behind symbol -->
+  <g opacity="0.24" filter="url(#strongGlow)">
+    <path d="M275 300 H640 L535 435 H596 L515 548
+             M330 350 V640
+             Q330 748 438 748
+             H580
+             Q690 748 690 638
+             V540"
+          fill="none" stroke="#31DFFF" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Main T + U monogram -->
+  <g filter="url(#drop3d)">
+    <!-- T upper bar, sculpted -->
+    <path d="M274 294
+             H651
+             L579 382
+             H473
+             L381 382
+             H334
+             Q284 382 284 334
+             Q284 310 300 294
+             Z"
+          fill="url(#metalGrad)"/>
+
+    <!-- U body -->
+    <path d="M329 356
+             H411
+             V626
+             Q411 686 470 686
+             H565
+             Q627 686 627 624
+             V528
+             H709
+             V635
+             Q709 772 573 772
+             H458
+             Q329 772 329 642
+             Z"
+          fill="url(#metalGrad)"/>
+
+    <!-- Lightning cut / overlay -->
+    <path d="M518 336
+             L438 505
+             H505
+             L458 662
+             L614 458
+             H548
+             L603 336
+             Z"
+          fill="url(#boltGrad)"
+          stroke="#EFFFFF" stroke-width="4"
+          stroke-linejoin="round"/>
+
+    <!-- inner blue bevel on bolt -->
+    <path d="M518 336 L438 505 H505 L458 662"
+          fill="none" stroke="#60EFFF" stroke-width="8" stroke-linecap="round" opacity="0.55"/>
+
+    <!-- subtle symbol top highlights -->
+    <path d="M301 312 H622"
+          stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="7" stroke-linecap="round"/>
+  </g>
+
+  <!-- Circuit branches on the right -->
+  <g fill="none" stroke="url(#metalGrad)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" filter="url(#drop3d)">
+    <path d="M683 546 V439 L756 366"/>
+    <path d="M711 548 V466 L805 432"/>
+    <path d="M741 562 V515 L815 510"/>
+  </g>
+
+  <!-- Circuit glow underlay -->
+  <g fill="none" stroke="#48DEFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+    <path d="M683 546 V439 L756 366"/>
+    <path d="M711 548 V466 L805 432"/>
+    <path d="M741 562 V515 L815 510"/>
+  </g>
+
+  <!-- Circuit nodes -->
+  <g filter="url(#softGlow)">
+    <circle cx="756" cy="366" r="27" fill="#0B4C9B" stroke="#EFFFFF" stroke-width="13"/>
+    <circle cx="805" cy="432" r="27" fill="#163C92" stroke="#EFFFFF" stroke-width="13"/>
+    <circle cx="815" cy="510" r="24" fill="#311D80" stroke="#EFFFFF" stroke-width="12"/>
+    <circle cx="756" cy="366" r="7" fill="#50E9FF"/>
+    <circle cx="805" cy="432" r="7" fill="#49DFFF"/>
+    <circle cx="815" cy="510" r="7" fill="#9D7CFF"/>
+  </g>
+
+  <!-- lower subtle reflected glow -->
+  <ellipse cx="520" cy="823" rx="260" ry="38" fill="#33CFFF" opacity="0.08"/>
+  <ellipse cx="615" cy="824" rx="160" ry="26" fill="#8D64FF" opacity="0.06"/>
+
+  <!-- hidden brand metadata -->
+  <metadata>thunderuni AI brand icon — original T/U + lightning + circuit concept</metadata>
+</svg>

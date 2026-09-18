@@ -1,4 +1,4 @@
-import type { Sub2apiErrorSummary } from './types.ts'
+import type { Sub2apiComplianceRequirement, Sub2apiErrorSummary } from './types.ts'
 
 /** Stable error categories reserved by the Sub2API integration. */
 export type Sub2apiErrorCode =
@@ -20,6 +20,7 @@ export type Sub2apiErrorCode =
   | 'SUB2API_SERVICE_UNAVAILABLE'
   | 'SUB2API_PROTOCOL_MISMATCH'
   | 'SUB2API_RECHARGE_UNAVAILABLE'
+  | 'SUB2API_ADMIN_COMPLIANCE_REQUIRED'
 
 /** Additional facts attached to a stable integration error. */
 export interface Sub2apiErrorOptions {
@@ -27,6 +28,7 @@ export interface Sub2apiErrorOptions {
   readonly httpStatus?: number
   readonly retryable?: boolean
   readonly retryAfterMs?: number
+  readonly compliance?: Sub2apiComplianceRequirement
 }
 
 /** Classified failure that may safely cross a Host-to-UI error projection. */
@@ -41,6 +43,8 @@ export class Sub2apiError extends Error {
   readonly retryable: boolean
   /** Optional upstream retry delay in milliseconds. */
   readonly retryAfterMs: number | undefined
+  /** Safe deployment metadata explaining an administrator compliance gate. */
+  readonly compliance: Sub2apiComplianceRequirement | undefined
 
   /**
    * Create one classified Sub2API failure.
@@ -54,6 +58,7 @@ export class Sub2apiError extends Error {
     this.httpStatus = options.httpStatus
     this.retryable = options.retryable ?? false
     this.retryAfterMs = options.retryAfterMs
+    this.compliance = options.compliance
   }
 
   /**
@@ -66,6 +71,7 @@ export class Sub2apiError extends Error {
       message: this.message,
       retryable: this.retryable,
       ...(this.retryAfterMs === undefined ? {} : { retryAfterMs: this.retryAfterMs }),
+      ...(this.compliance === undefined ? {} : { compliance: this.compliance }),
     }
   }
 }

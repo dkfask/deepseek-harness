@@ -6,7 +6,10 @@
     { "path": "../../../vendor/cordis" },
     { "path": "../ui-slots" },
     { "path": "../ui-settings" },
+    { "path": "../ui-settings-models" },
     { "path": "../ui-renderer" },
+    { "path": "../ui-primitives" },
+    { "path": "../ui-sidebar" },
     { "path": "../locale" },
     { "path": "../../api/remotes/tsconfig.client.json" }
   ]

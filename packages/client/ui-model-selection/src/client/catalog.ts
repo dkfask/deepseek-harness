@@ -46,10 +46,11 @@ export class ModelCatalogDirectory {
       if (!response.ok) {
         throw new Error(`${response.error.code}: ${response.error.message}`)
       }
+      const value = deploymentCatalog(response.value)
       if (generation === this.generation) {
-        this.store.set({ value: response.value, status: 'ready', error: null })
+        this.store.set({ value, status: 'ready', error: null })
       }
-      return response.value
+      return value
     }).catch((error: unknown) => {
       if (generation === this.generation) {
         this.store.update((draft) => {
@@ -86,5 +87,31 @@ export class ModelCatalogDirectory {
   resetGeneration(): void {
     this.invalidate(true)
     void this.load().catch(() => { /* the selector exposes the shared error */ })
+  }
+}
+
+/**
+ * Keep a deployment-owned Sub2API catalog from exposing the built-in DeepSeek
+ * route in model selection. The adapter can remain mounted for auxiliary Host
+ * services, but it is not a user-selectable model in this deployment.
+ * @param catalog - Host model catalog before deployment filtering.
+ * @returns the catalog projected for the current deployment.
+ */
+function deploymentCatalog(catalog: ModelCatalog): ModelCatalog {
+  const sub2api = catalog.groups.find(group => group.id === 'sub2api')
+  if (sub2api === undefined || sub2api.models.length === 0) return catalog
+  const groups = catalog.groups.filter(group => group.id !== 'deepseek-official')
+  const defaultGroup = groups.find(group => group.id === catalog.default.provider)
+  const defaultModel = defaultGroup?.models.find(model => model.id === catalog.default.model)
+  const fallback = sub2api.models[0]
+  if (fallback === undefined) return catalog
+  return {
+    ...catalog,
+    default: defaultModel === undefined
+      ? { provider: 'sub2api', model: fallback.id }
+      : catalog.default,
+    routableProviders: catalog.routableProviders.filter(provider => provider !== 'deepseek-official'),
+    groups,
+    failures: catalog.failures.filter(failure => failure.id !== 'deepseek-official'),
   }
 }

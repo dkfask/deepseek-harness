@@ -3,6 +3,7 @@ import {
   desktopElectronBuilderArguments,
   desktopElectronBuilderEnvironment,
   parseDesktopPackageInvocation,
+  resolveDesktopRuntimeEnvironment,
   resolveDesktopPackageTarget,
   withoutDesktopUploadCredentials,
   withoutWindowsSigningEnvironment,
@@ -46,6 +47,24 @@ describe('desktop package target', () => {
       .toThrow(/official.*thunderuni/u)
     expect(() => parseDesktopPackageInvocation(['mac-arm64', 'mac-x64'], 'darwin', 'arm64'))
       .toThrow(/at most one target/u)
+  })
+
+  it('seals the configured Sub2API group and Bearer gateway mode into ThunderUni builds', () => {
+    expect(resolveDesktopRuntimeEnvironment('thunderuni', {
+      DSH_SUB2API_MANAGED_KEY_GROUP_ID: '7',
+    })).toMatchObject({
+      DSH_DESKTOP_BRAND: 'ThunderUni',
+      DSH_SUB2API_MANAGED_KEY_GROUP_ID: '7',
+      DSH_SUB2API_GATEWAY_AUTH_SCHEME: 'bearer',
+      DSH_SUB2API_LLM_ENABLED: 'true',
+      DSH_SUB2API_PERSIST_REFRESH_TOKEN: 'true',
+      DSH_SUB2API_TOOLS_ENABLED: 'true',
+      DSH_SUB2API_VERIFIED_TOOLS_MODELS: 'gpt-5.6-sol',
+    })
+    expect(resolveDesktopRuntimeEnvironment('official', {})).toEqual({})
+    expect(() => resolveDesktopRuntimeEnvironment('thunderuni', {})).toThrow(/requires DSH_SUB2API_MANAGED_KEY_GROUP_ID/u)
+    expect(() => resolveDesktopRuntimeEnvironment('thunderuni', { DSH_SUB2API_MANAGED_KEY_GROUP_ID: '0' }))
+      .toThrow(/positive integer/u)
   })
 
   it('keeps electron-builder publishing disabled for the separate validated upload', () => {

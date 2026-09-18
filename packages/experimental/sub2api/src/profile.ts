@@ -30,7 +30,7 @@ export interface Sub2apiProfileInput {
  * @returns the normalized origin.
  */
 export function normalizeSub2apiOrigin(value: string, allowInsecureHttpOrigins: readonly string[] = []): string {
-  const url = parseBaseUrl(value)
+  const url = parseBaseUrl(value, allowInsecureHttpOrigins)
   if (url.pathname !== '/' || url.search !== '' || url.hash !== '') {
     throw profileError('an origin must not contain a path, query, or fragment')
   }
@@ -90,13 +90,13 @@ export function sub2apiDeploymentFingerprint(value: string): Sub2apiDeploymentFi
 }
 
 function normalizeApiBase(value: string, allowInsecureHttpOrigins: readonly string[]): string {
-  const url = parseBaseUrl(value)
+  const url = parseBaseUrl(value, allowInsecureHttpOrigins)
   assertAllowedProtocol(url, allowInsecureHttpOrigins)
   const pathname = url.pathname.replace(/\/+$/, '')
   return `${url.origin}${pathname === '/' ? '' : pathname}`
 }
 
-function parseBaseUrl(value: string): URL {
+function parseBaseUrl(value: string, allowInsecureHttpOrigins: readonly string[]): URL {
   let url: URL
   try {
     url = new URL(value)
@@ -106,7 +106,8 @@ function parseBaseUrl(value: string): URL {
   if (url.username !== '' || url.password !== '' || url.hostname === '') {
     throw profileError('base URL must not contain credentials and must include a host')
   }
-  if (isUnsafeHostname(url.hostname)) {
+  if (isUnsafeHostname(url.hostname)
+    && !(url.protocol === 'http:' && allowInsecureHttpOrigins.includes(url.origin))) {
     throw profileError('base URL host is not allowed')
   }
   return url
@@ -128,8 +129,10 @@ function normalizeAccountPaths(paths: Sub2apiAccountPaths): Sub2apiAccountPaths 
     ...(paths.refresh === undefined ? {} : { refresh: normalizePath(paths.refresh) }),
     me: normalizePath(paths.me),
     apiKeys: normalizePath(paths.apiKeys),
+    ...(paths.groupsAvailable === undefined ? {} : { groupsAvailable: normalizePath(paths.groupsAvailable) }),
     ...(paths.usage === undefined ? {} : { usage: normalizePath(paths.usage) }),
     ...(paths.recharge === undefined ? {} : { recharge: normalizePath(paths.recharge) }),
+    ...(paths.publicSettings === undefined ? {} : { publicSettings: normalizePath(paths.publicSettings) }),
   }
 }
 

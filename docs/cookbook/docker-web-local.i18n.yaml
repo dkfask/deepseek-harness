@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/cookbook/docker-web-local.md
+docker-web-local.md: eb1b40b6be70f25bad2adc1088919c29162fcb2f
+docker-web-local.zh.md: 9ab45fa58dcc0bc634621e6beaa844ab01c90af9

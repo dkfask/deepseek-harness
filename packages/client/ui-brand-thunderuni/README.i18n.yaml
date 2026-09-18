@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-brand-thunderuni/README.md
-README.md: 85a694aed6b02e4fcc893755bdd7daaec8689035
-README.zh.md: 0012a717456014847c856aa3b4538e578bb768d4
+README.md: 441b1fb14f735c2d136dd1f722e5acadfd952048
+README.zh.md: b0348113af76e2b88b41266b0cd83588f2a4e392

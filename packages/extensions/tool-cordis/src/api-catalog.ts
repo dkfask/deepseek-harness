@@ -2335,6 +2335,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'usage and balance data with freshness metadata.',
       },
       {
+        signature: 'getPublicSettings(signal?: AbortSignal): Promise<Sub2apiPublicSettings | undefined>',
+        description: 'Read unauthenticated deployment capability settings.',
+        parameters: [{ name: 'signal', description: 'optional cancellation signal for the public-settings request.' }],
+        returns: 'public settings, or `undefined` when the profile has no endpoint.',
+      },
+      {
         signature: 'getRechargeUrl(signal?: AbortSignal): Promise<string | undefined>',
         description: 'Return the validated recharge URL, when the profile exposes one.',
         parameters: [{ name: 'signal', description: 'optional cancellation signal.' }],
@@ -5811,7 +5817,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Sub2apiAccountPaths',
-    declaration: 'export interface Sub2apiAccountPaths {\n    readonly login: string;\n    readonly register: string;\n    readonly loginTwoFactor?: string;\n    readonly refresh?: string;\n    readonly me: string;\n    readonly apiKeys: string;\n    readonly usage?: string;\n    readonly recharge?: string;\n}',
+    declaration: 'export interface Sub2apiAccountPaths {\n    readonly login: string;\n    readonly register: string;\n    readonly loginTwoFactor?: string;\n    readonly refresh?: string;\n    readonly me: string;\n    readonly apiKeys: string;\n    readonly usage?: string;\n    readonly recharge?: string;\n    readonly publicSettings?: string;\n}',
   },
   {
     name: 'Sub2apiAccountSnapshot',
@@ -5819,11 +5825,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Sub2apiAccountSummary',
-    declaration: 'export interface Sub2apiAccountSummary {\n    readonly userId: string;\n    readonly email?: string;\n    readonly displayName?: string;\n}',
+    declaration: 'export interface Sub2apiAccountSummary {\n    readonly userId: string;\n    readonly email?: string;\n    readonly displayName?: string;\n    readonly balance?: number;\n}',
   },
   {
     name: 'Sub2apiAuthState',
     declaration: 'export type Sub2apiAuthState = \'signed-out\' | \'authenticating\' | \'two-factor-required\' | \'authenticated\' | \'refreshing\' | \'reauth-required\' | \'key-required\' | \'insufficient-balance\' | \'signing-out\';',
+  },
+  {
+    name: 'Sub2apiComplianceRequirement',
+    declaration: 'export interface Sub2apiComplianceRequirement {\n    readonly version?: string;\n    readonly documentUrlZh?: string;\n    readonly documentUrlEn?: string;\n    readonly ackPhraseZh?: string;\n    readonly ackPhraseEn?: string;\n}',
   },
   {
     name: 'Sub2apiDeploymentFingerprint',
@@ -5831,7 +5841,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Sub2apiErrorSummary',
-    declaration: 'export interface Sub2apiErrorSummary {\n    readonly code: string;\n    readonly message: string;\n    readonly retryable: boolean;\n    readonly retryAfterMs?: number;\n}',
+    declaration: 'export interface Sub2apiErrorSummary {\n    readonly code: string;\n    readonly message: string;\n    readonly retryable: boolean;\n    readonly retryAfterMs?: number;\n    readonly compliance?: Sub2apiComplianceRequirement;\n}',
   },
   {
     name: 'Sub2apiGatewayAuthScheme',
@@ -5858,8 +5868,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface Sub2apiProtocolProfile {\n    readonly version: string;\n    readonly allowInsecureHttpOrigins: readonly string[];\n    readonly accountBaseUrl: string;\n    readonly gatewayBaseUrl: string;\n    readonly account: {\n        readonly paths: Sub2apiAccountPaths;\n        readonly responseEnvelope: Sub2apiResponseEnvelope;\n    };\n    readonly gateway: {\n        readonly paths: Sub2apiGatewayPaths;\n        readonly responseEnvelope: Sub2apiResponseEnvelope;\n        readonly authScheme: Sub2apiGatewayAuthScheme;\n    };\n}',
   },
   {
+    name: 'Sub2apiPublicSettings',
+    declaration: 'export interface Sub2apiPublicSettings {\n    readonly registrationEnabled?: boolean;\n    readonly emailVerifyEnabled?: boolean;\n    readonly totpEnabled?: boolean;\n    readonly paymentEnabled?: boolean;\n    readonly subscriptionEnabled?: boolean;\n    readonly paymentBalanceDisabled?: boolean;\n    readonly rechargeUrl?: string;\n}',
+  },
+  {
     name: 'Sub2apiRegisterInput',
-    declaration: 'export interface Sub2apiRegisterInput {\n    readonly email: string;\n    readonly password: string;\n    readonly captcha?: string;\n    readonly verificationCode?: string;\n}',
+    declaration: 'export interface Sub2apiRegisterInput {\n    readonly email: string;\n    readonly password: string;\n    readonly verificationCode?: string;\n}',
   },
   {
     name: 'Sub2apiResponseEnvelope',

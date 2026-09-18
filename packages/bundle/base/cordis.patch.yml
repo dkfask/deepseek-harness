@@ -107,6 +107,63 @@
     - id: llm-pi-ai
       name: '@deepseek-ai/dsh-llm-pi-ai'
 
+    # Shared Sub2API account and gateway service. It is dormant unless the
+    # deployment explicitly opts in through DSH_SUB2API_ENABLED. The local
+    # loopback target is a development default; production profiles must set
+    # their own HTTPS origins and fingerprint.
+    - id: sub2api
+      name: '@deepseek-ai/dsh-experimental-sub2api'
+      disabled: !!js process.env.DSH_SUB2API_ENABLED !== 'true'
+      config:
+        profile:
+          version: !!js process.env.DSH_SUB2API_PROFILE_VERSION ?? 'sub2api-0.2.5-local'
+          accountBaseUrl: !!js process.env.DSH_SUB2API_ACCOUNT_URL ?? 'http://127.0.0.1:8090/api/v1'
+          gatewayBaseUrl: !!js process.env.DSH_SUB2API_GATEWAY_URL ?? 'http://127.0.0.1:8090'
+          accountPaths:
+            login: /auth/login
+            register: /auth/register
+            loginTwoFactor: /auth/login/2fa
+            refresh: /auth/refresh
+            me: /auth/me
+            apiKeys: /keys
+            groupsAvailable: /groups/available
+            usage: /usage/dashboard/stats
+            recharge: !!js process.env.DSH_SUB2API_RECHARGE_PATH
+            publicSettings: /settings/public
+          gatewayPaths:
+            models: /v1/models
+            chatCompletions: /v1/chat/completions
+          accountResponseEnvelope: data
+          gatewayResponseEnvelope: direct
+          gatewayAuthScheme: !!js process.env.DSH_SUB2API_GATEWAY_AUTH_SCHEME ?? 'api-key'
+          allowInsecureHttpOrigins:
+            - !!js new URL(process.env.DSH_SUB2API_ACCOUNT_URL ?? 'http://127.0.0.1:8090/api/v1').origin
+            - !!js new URL(process.env.DSH_SUB2API_GATEWAY_URL ?? 'http://127.0.0.1:8090').origin
+        deploymentFingerprint: !!js process.env.DSH_SUB2API_DEPLOYMENT_FINGERPRINT ?? 'sub2api-0.2.5-local'
+        managedKeyName: !!js process.env.DSH_SUB2API_MANAGED_KEY_NAME ?? 'dsh:managed'
+        managedKeyGroupId: !!js Number(process.env.DSH_SUB2API_MANAGED_KEY_GROUP_ID ?? 0) || undefined
+        cacheTtlMs:
+          account: !!js Number(process.env.DSH_SUB2API_ACCOUNT_CACHE_TTL_MS ?? 30000)
+          models: !!js Number(process.env.DSH_SUB2API_MODELS_CACHE_TTL_MS ?? 30000)
+          groups: !!js Number(process.env.DSH_SUB2API_GROUPS_CACHE_TTL_MS ?? 30000)
+          usage: !!js Number(process.env.DSH_SUB2API_USAGE_CACHE_TTL_MS ?? 30000)
+          publicSettings: !!js Number(process.env.DSH_SUB2API_PUBLIC_SETTINGS_CACHE_TTL_MS ?? 300000)
+        refreshSkewMs: !!js Number(process.env.DSH_SUB2API_REFRESH_SKEW_MS ?? 60000)
+        persistRefreshToken: !!js process.env.DSH_SUB2API_PERSIST_REFRESH_TOKEN === 'true'
+        rechargeAllowedOrigins: !!js JSON.parse(process.env.DSH_SUB2API_RECHARGE_ALLOWED_ORIGINS ?? '[]')
+        httpOptions:
+          maxResponseBytes: !!js Number(process.env.DSH_SUB2API_MAX_RESPONSE_BYTES ?? 1048576)
+          timeoutMs: !!js Number(process.env.DSH_SUB2API_TIMEOUT_MS ?? 30000)
+          maxRedirects: !!js Number(process.env.DSH_SUB2API_MAX_REDIRECTS ?? 0)
+        llm:
+          enabled: !!js process.env.DSH_SUB2API_LLM_ENABLED === 'true'
+          toolsEnabled: !!js process.env.DSH_SUB2API_TOOLS_ENABLED === 'true'
+          verifiedToolsModels: !!js (process.env.DSH_SUB2API_VERIFIED_TOOLS_MODELS ?? '').split(',').map(value => value.trim()).filter(Boolean)
+          verifiedChatCompletions: !!js process.env.DSH_SUB2API_CHAT_COMPLETIONS_VERIFIED === 'true'
+          verifiedStreaming: !!js process.env.DSH_SUB2API_STREAMING_VERIFIED === 'true'
+          defaultContextWindow: !!js Number(process.env.DSH_SUB2API_CONTEXT_WINDOW ?? 0) || undefined
+          defaultMaxTokens: !!js Number(process.env.DSH_SUB2API_MAX_TOKENS ?? 0) || undefined
+
     - id: session-persistence-jsonl
       name: '@deepseek-ai/dsh-session-persistence-jsonl'
       config:

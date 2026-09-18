@@ -269,7 +269,7 @@ function normalizeFixturePath(value: unknown, label: string): string {
 }
 
 function requireMethod(value: unknown, label: string): Sub2apiHttpMethod {
-  if (value === 'DELETE' || value === 'GET' || value === 'PATCH' || value === 'POST') return value
+  if (value === 'DELETE' || value === 'GET' || value === 'PATCH' || value === 'POST' || value === 'PUT') return value
   throw fixtureError(`${label} is not a supported HTTP method`)
 }
 
