@@ -21,6 +21,7 @@ describe('desktop build paths', () => {
       'packedDsh',
       'packedVendor',
       'packedLandlock',
+      'runtimeConfig',
     ] as const
 
     for (const key of mutableKeys) {

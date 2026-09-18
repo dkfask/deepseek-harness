@@ -1,6 +1,8 @@
 /** Electron-builder fields asserted by the Desktop release tests. */
 export interface DesktopElectronBuilderConfig {
   readonly appId: string
+  readonly productName: string
+  readonly artifactName: string
   readonly directories: {
     readonly output: string
   }
@@ -8,8 +10,10 @@ export interface DesktopElectronBuilderConfig {
     { readonly from: string, readonly to: 'runtime' },
     { readonly from: string, readonly to: 'dsh' },
     { readonly from: string, readonly to: 'dsh/node_modules' },
+    { readonly from: string, readonly to: 'desktop-runtime-config.json' },
   ]
   readonly mac: {
+    readonly icon?: string
     readonly identity: string | undefined
     readonly forceCodeSigning: boolean
     readonly notarize: boolean
@@ -21,6 +25,9 @@ export interface DesktopElectronBuilderConfig {
   }
   readonly nsis: {
     readonly include: string
+  }
+  readonly win?: {
+    readonly icon?: string
   }
   readonly artifactBuildCompleted: (artifact: { readonly file: string }) => Promise<void> | undefined
   readonly publish: readonly [{ readonly provider: 'generic', readonly url: string }] | null

@@ -11,6 +11,8 @@ kind: "package-reference"
 
 `ui-conversation` 拥有与 target 无关的 Conversation 组装和共享浏览器 shell。它消费 Session Controller 的 `SessionEventLikeEntry` feed，通过 `ctx.uiConversation` 暴露不依赖 React 的注册表与逐 Session binding，并通过 `ctx.uiSession` 提供 `useConversation`、`useInput` 和 `inputActions` 标准 props。它还拥有按会话的持久化图片 URL 缓存：`ctx.uiConversation.imageUrl(sessionId, attachment)` 为每个附件解析一个经会话授权的浏览器 URL，并随 Session binding 释放而撤销，因此所有 Conversation target 共享一次 `session.attachment` 读取。Chat 等具体 target 位于独立包，由各自包注册 Definition、快照 builder、View 和 renderer。
 
+composer 上下文计量器从 `contextPressure` projection 读取最近一次请求容量。实时模型容量更新可以立即替换当前选中路由的分母；下一次模型请求会把同一容量持久化记录下来，而重新加载的 Session 会继续显示最近一次已记录的容量，直到下一次请求解析路由。
+
 ## 目录
 
 - [Conversation 组装](#conversation-assembly)

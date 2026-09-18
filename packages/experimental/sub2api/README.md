@@ -1,6 +1,6 @@
 ---
 description: "Host-side Sub2API account, model-gateway, Remote, fixture, and lifecycle helpers with an opt-in provider route and secret-free projections."
-kind: "package-library"
+kind: "package-reference"
 ---
 
 # @deepseek-ai/dsh-experimental-sub2api
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This library gives Host code an explicit Sub2API account runtime and an opt-in model route. Callers compose a deployment profile, validate a version-one grant, run login/refresh/API-Key reconciliation through a credential-store seam, produce secret-free state, and send bounded requests through an injected destination validator. `Sub2apiService` mounts the runtime through `ctx.credentials`, exposes the `sub2api` Remote namespace, and can register a dynamic `llm-pi-ai` route only when its feature flag is enabled.
+This library gives Host code an explicit Sub2API account runtime and an opt-in model route. Callers compose a deployment profile, validate a version-one grant, run login/refresh/API-Key reconciliation through a credential-store seam, produce secret-free state, and send bounded requests through an injected destination validator. `Sub2apiService` mounts the runtime through `ctx.credentials`, exposes the `sub2api` Remote namespace, and can register a dynamic `llm-pi-ai` route only when its feature flag is enabled. Base-backed profiles carry the same service row disabled by default; an explicit deployment environment enables it and supplies the target facts.
 
 ## Table of Contents
 
@@ -29,7 +29,7 @@ This library gives Host code an explicit Sub2API account runtime and an opt-in m
 
 Use `Sub2apiRuntimeService` when a Host provider needs login, refresh, managed API-Key reconciliation, account/model/usage refresh, and recharge URL validation while keeping secrets separate from UI-safe state. Use `Sub2apiHttpClient` for bounded protocol requests after supplying a resolver that validates and pins the destination used by the actual connection. The standard codec is intentionally fixture-oriented: compose it only after its field and envelope choices are verified for the target deployment.
 
-### Entry point
+### Minimal configuration
 
 ```ts
 import { resolveSub2apiProfile, parseSub2apiGrantRecord, redactSub2apiGrantRecord, Sub2apiHttpClient, type Sub2apiDestinationValidator } from '@deepseek-ai/dsh-experimental-sub2api'
@@ -38,7 +38,7 @@ const profile = resolveSub2apiProfile({
   version: 'verified-deployment-version',
   accountBaseUrl: 'https://account.example.test/api/v1',
   gatewayBaseUrl: 'https://gateway.example.test',
-  accountPaths: { login: '/auth/login', register: '/auth/register', me: '/auth/me', apiKeys: '/keys' },
+  accountPaths: { login: '/auth/login', register: '/auth/register', publicSettings: '/settings/public', me: '/auth/me', apiKeys: '/keys', groupsAvailable: '/groups/available' },
   gatewayPaths: { models: '/v1/models', chatCompletions: '/v1/chat/completions' },
 })
 const record = parseSub2apiGrantRecord(untrustedJson)
@@ -61,7 +61,17 @@ const account = await client.request({ base: 'account', path: '/auth/me', method
 
 The runtime accepts the same client plus a credential-store adapter. Its public state contains only account metadata, cache timestamps, models, usage, and stable errors; `resolveGatewayCredential` is the Host-only path that returns the managed Key snapshot for a model provider.
 
-The profile succeeds only for validated HTTPS or an exact development HTTP allowlist entry, safe hosts, and relative endpoint paths. The HTTP client adds JSON and verified authentication headers, revalidates same-origin redirect hops, bounds response bytes, honors cancellation and timeouts, and maps status failures without returning upstream error bodies. The record parser rejects unsupported or malformed durable values. The redacted projection contains account metadata and key metadata, never a refresh token or API Key secret.
+Set `persistRefreshToken` only for a deployment that intentionally supports local session recovery. When enabled, `hydrate` refreshes a matching stored grant during Host startup; the credential store receives the refresh token and managed Key, never the account password or access token.
+
+When `accountPaths.publicSettings` is configured, `getPublicSettings` reads the unauthenticated deployment capability response without an access token and caches it for the explicit `cacheTtlMs.publicSettings` interval. When `accountPaths.groupsAvailable` is configured, `getAvailableGroups` reads the authenticated user's named groups and caches them for `cacheTtlMs.groups`; the browser uses these names for managed-Key group selection. The settings section treats registration and billing controls as unavailable unless the deployment reports them enabled; a profile without these optional endpoints retains its existing endpoint-driven behavior.
+
+The Host registers the live `sub2api-models` settings namespace when a settings provider is present. Its model card can persist a context-window override for each discovered model; the override is applied to the secret-free descriptor and dynamic LLM profile, so the next request uses the configured capacity and the value survives restart. The runtime accepts only positive safe integer capacities, while the browser also accepts `K`, `M`, and `G` suffixes.
+
+The Sub2API LLM route keeps tool calls disabled unless `toolsEnabled` is true and the model metadata marks the model as verified or its id appears in `verifiedToolsModels`. Base profiles expose the latter as the comma-separated `DSH_SUB2API_VERIFIED_TOOLS_MODELS` environment value, so a deployment can record a real tool-call probe for one model without inferring support for every unknown model.
+
+The profile succeeds only for validated HTTPS or an exact development HTTP allowlist entry, safe hosts, and relative endpoint paths. The HTTP client adds JSON and verified authentication headers, revalidates same-origin redirect hops, bounds response bytes, honors cancellation and timeouts, and maps status failures without returning upstream error bodies. The record parser rejects unsupported or malformed durable values. The redacted projection contains account metadata and key metadata, never a refresh token or API Key secret. A runtime that creates the managed Key must provide a positive `managedKeyGroupId`; Sub2API uses that group to route gateway traffic. Managed-Key reconciliation records the selected `group_id`, ignores same-named keys from other groups, and rejects a create response that names the wrong group. An authenticated account owner can update the managed Key group through the user `PUT /keys/{id}` endpoint; the runtime persists the new group while retaining the Host-only secret and invalidates model discovery so the next gateway request uses the new route.
+
+The Sub2API LLM route keeps tool calls disabled unless `toolsEnabled` is true and the model metadata marks the model as verified or its id appears in `verifiedToolsModels`. Base profiles expose the latter as the comma-separated `DSH_SUB2API_VERIFIED_TOOLS_MODELS` environment value, so a deployment can record a real tool-call probe for one model without inferring support for every unknown model.
 
 -----
 
@@ -84,13 +94,14 @@ The package keeps protocol choices, durable-record parsing, secret branding, sta
 | [`src/cordis.ts`](src/cordis.ts) | Mount the runtime as `ctx.sub2api`, expose Remote methods, and register the shared authorization flow |
 | [`src/llm.ts`](src/llm.ts) | Register the opt-in `sub2api` route over the shared `llm-pi-ai` Chat Completions/SSE adapter |
 | [`src/remote.ts`](src/remote.ts) | Project account actions and state through a secret-free Typert Remote namespace |
-| [`src/compatibility.ts`](src/compatibility.ts) | Parse the locked-baseline, target-deployment, and fixture evidence matrix |
+| [`src/compatibility.ts`](src/compatibility.ts) | Parse the locked-baseline, target-deployment, and fixture evidence matrix plus redacted target observations |
 | [`src/fixtures.ts`](src/fixtures.ts) | Parse and replay versioned business fixtures, then supply deterministic fetch and credential-store doubles for protocol and race tests |
 | [`src/errors.ts`](src/errors.ts) | Define the stable Sub2API error taxonomy and redacted error summaries |
 | [`src/types.ts`](src/types.ts) | Keep wire-safe and durable type declarations separate from runtime code |
 | [`tests/fixtures/account-v1.json`](tests/fixtures/account-v1.json) | Synthetic request assertions and responses for the Host runtime replay path |
 | [`tests/fixtures/gateway-v1.json`](tests/fixtures/gateway-v1.json) | Synthetic model-list, non-streaming Chat Completions, SSE, and usage exchanges |
 | [`tests/fixtures/compatibility-matrix-v1.json`](tests/fixtures/compatibility-matrix-v1.json) | P0/P1 evidence rows that keep target deployment evidence separate from synthetic fixture status |
+| [`tests/fixtures/target-local-0.2.5-v1.json`](tests/fixtures/target-local-0.2.5-v1.json) | Redacted observations from the local target; it records paths, statuses, field names, counts, and stream termination without secrets |
 
 </details>
 
@@ -121,9 +132,10 @@ Route metadata is resolved from the current secret-free model catalog; request c
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **No live target evidence** — the compatibility matrix records the locked baseline and target deployment as `not-provided`; synthetic fixtures prove harness behavior but do not prove an external deployment.
-- **Composition supplies transport facts** — `Sub2apiService` still requires a verified profile, HTTP client, destination validator, and credential provider from the selected desktop, web, headless, or CLI composition.
+- **Partial target evidence** — a local Sub2API 0.2.5 container has passed account login, refresh, current-user, managed-Key creation with an assigned group, usage dashboard, model discovery, non-streaming Chat Completions, and streaming SSE against a deterministic OpenAI-compatible upstream. Twelve matching P0 rows are recorded as `verified`; rows without a complete independently evidenced baseline and target contract remain `not-provided`.
+- **Composition supplies deployment facts** — the shared base row can create a loopback-only development transport from explicit `httpOptions`; production hostnames require an injected resolver and pinned transport. The credential provider remains supplied by the selected desktop, web, headless, or CLI composition.
 - **Capabilities remain fail-closed** — model metadata must explicitly verify streaming, capacity, and other capabilities; tools and Responses remain disabled without the required independent evidence.
+- **Tools are an explicit deployment opt-in** — set `DSH_SUB2API_TOOLS_ENABLED=true` only after the target model's request and tool-call response have an independent fixture. The shared base defaults this flag to `false`; a validated ThunderUni deployment may enable it together with the comma-separated `DSH_SUB2API_VERIFIED_TOOLS_MODELS` allowlist, and model ids outside that list remain blocked when metadata is unknown.
 - **Recharge is a validated redirect** — the settings section can open only a server or configuration URL that passes the profile's scheme, origin, and redirect policy.
 
 <a id="dev-note"></a>
@@ -132,7 +144,7 @@ Route metadata is resolved from the current secret-free model catalog; request c
 <details>
 <summary>Working context for maintainers</summary>
 
-This package remains private and experimental until a real target deployment closes the relevant P0 questions. Its current code provides the Host runtime, shared provider route, Remote/UI projection, and replay fixtures; synthetic fixtures are not evidence that a Sub2API deployment is reachable or compatible.
+This package remains experimental until a real target deployment closes the relevant P0 questions. Its current code provides the Host runtime, shared provider route, Remote/UI projection, and replay fixtures; synthetic fixtures are not evidence that a Sub2API deployment is reachable or compatible.
 
 </details>
 

@@ -3,6 +3,9 @@
 /** Environment variable that supplies the Electron application identifier. */
 export const DESKTOP_APP_ID_ENV = 'DSH_DESKTOP_APP_ID'
 
+/** Environment variable selecting the immutable Desktop client profile. */
+export const DESKTOP_CLIENT_PROFILE_ENV = 'DSH_DESKTOP_CLIENT_PROFILE'
+
 /** Environment variable that supplies electron-builder's macOS certificate qualifier. */
 export const MACOS_SIGNING_IDENTITY_ENV = 'DSH_DESKTOP_MACOS_SIGNING_IDENTITY'
 
@@ -43,6 +46,19 @@ export function resolveDesktopAppId(env) {
     throw new Error(`desktop release environment: ${DESKTOP_APP_ID_ENV} must be a reverse-DNS identifier`)
   }
   return appId
+}
+
+/**
+ * Resolve the client profile used for the shell product identity and runtime defaults.
+ * @param {NodeJS.ProcessEnv} env - Packaging environment.
+ * @returns {'official' | 'thunderuni'} Selected client profile.
+ */
+export function resolveDesktopClientProfile(env) {
+  const profile = env[DESKTOP_CLIENT_PROFILE_ENV]?.trim() || 'official'
+  if (profile !== 'official' && profile !== 'thunderuni') {
+    throw new Error(`desktop release environment: ${DESKTOP_CLIENT_PROFILE_ENV} must be "official" or "thunderuni"`)
+  }
+  return profile
 }
 
 /**

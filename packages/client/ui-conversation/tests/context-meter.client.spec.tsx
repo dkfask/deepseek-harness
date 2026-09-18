@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en as commonEn, zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/index.ts'
 import { ContextMeter, type ContextMeterProps } from '../src/client/skeleton/ContextMeter.tsx'
@@ -65,6 +65,22 @@ describe('ContextMeter', () => {
     // Clicking the trigger again toggles the panel shut.
     fireEvent.click(trigger)
     expect(view.container.querySelector('[role="dialog"]')).toBeNull()
+  })
+
+  it('applies a saved Sub2API model capacity to the active session immediately', () => {
+    const view = meter({
+      contextPressure: { pressureTokens: 15_923, contextWindow: 131_072 },
+      modelSelection: { next: { provider: 'sub2api', model: 'gpt-5.6-sol' }, lastUsed: null },
+      contextBreakdown: BREAKDOWN,
+    })
+    act(() => {
+      window.dispatchEvent(new CustomEvent('dsh:sub2api-model-context-updated', {
+        detail: { provider: 'sub2api', model: 'gpt-5.6-sol', contextWindow: 272_000 },
+      }))
+    })
+    const trigger = view.getByRole('button', { name: '上下文已用 6%' })
+    fireEvent.click(trigger)
+    expect(view.container.querySelector('[role="dialog"]')!.textContent).toContain('~15.9K / 272K')
   })
 
   it('lets each locale own the headline word order around the reading', () => {

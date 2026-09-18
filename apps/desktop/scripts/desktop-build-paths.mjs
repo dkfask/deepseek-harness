@@ -50,6 +50,7 @@ export function desktopTargetBuildPaths(target) {
     packedDsh: join(packed, 'dsh'),
     packedVendor: join(packed, 'vendor'),
     packedLandlock: join(packed, 'landlock'),
+    runtimeConfig: join(root, 'desktop-runtime-config.json'),
     downloads: join(BUILD_ROOT, 'downloads'),
   }
 }

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package provides the ThunderUni mark and localized name for the Web client's sidebar. The browser plugin registers the two standard brand slots only when `DSH_CLIENT_BUILD_PROFILE` is `thunderuni`; other profiles retain their own occupants or the sidebar fallbacks. The package contributes presentation only and does not change agent requests, permissions, models, sessions, or network behavior.
+This package provides the ThunderUni mark and localized name for the Web client's sidebar and blank-session hero. The browser plugin registers the ThunderUni occupants only when `DSH_CLIENT_BUILD_PROFILE` is `thunderuni`; other profiles retain their own occupants or the shell fallbacks. The package contributes presentation only and does not change agent requests, permissions, models, sessions, or network behavior.
 
 ## Table of Contents
 
@@ -27,14 +27,14 @@ This package provides the ThunderUni mark and localized name for the Web client'
 
 The Web bundle includes this package beside the official brand package. Build the private-branded client with `pnpm run build:thunderuni`; the build sets `DSH_CLIENT_BUILD_PROFILE=thunderuni` and `DSH_CLIENT_TITLE=ThunderUni`. The existing `pnpm run build:official` profile remains available and activates only the official occupants.
 
-The package owns the `thunderuni` locale namespace and supplies both English and Simplified Chinese dictionaries. The sidebar's localized name receives the standard typed `t` seat; the geometric mark is an independent SVG and does not reuse official artwork.
+The package owns the `thunderuni` locale namespace and supplies both English and Simplified Chinese dictionaries. The sidebar's localized name receives the standard typed `t` seat; the geometric mark is the supplied `thunderuni-ai-logo.svg` asset, embedded as a data URI so the Web bundle does not depend on a runtime file path.
 
 -----
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
-The browser half waits for both `sidebar.brand.mark` and `sidebar.brand.name` declarations before registering one occupant set. Declaration collapse withdraws both occupants, and plugin disposal removes the locale dictionaries and any active slot entries. The Host half is intentionally empty because the package has no server behavior.
+The browser half waits for both sidebar brand declarations before registering one occupant set. The same registration set also occupies `conversation.hero.brand.mark`, so the empty-session hero uses the supplied SVG instead of the animated fish fallback. Declaration collapse withdraws all three occupants, and plugin disposal removes the locale dictionaries and any active slot entries. The Host half is intentionally empty because the package has no server behavior.
 
 -----
 
@@ -60,7 +60,7 @@ None; the package does not participate in model request assembly.
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- **Sidebar-only identity** — the package does not replace the conversation hero artwork or server-side product language.
+- **Client-only identity** — the package replaces the sidebar and empty-session hero artwork, but does not change server-side product language.
 - **Build-time title** — the browser document title is selected by `DSH_CLIENT_TITLE`, outside the slot registry.
 
 <a id="dev-note"></a>

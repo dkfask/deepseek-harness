@@ -1,23 +1,31 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { AuthorizationSession } from '@deepseek-ai/dsh-authorization'
 import type {} from '@deepseek-ai/dsh-credentials'
+import type {} from '@deepseek-ai/dsh-settings'
+import { Sub2apiError } from './errors.ts'
 import type {
   Sub2apiAccountSnapshot,
   Sub2apiGatewayCredential,
+  Sub2apiGroupDescriptor,
   Sub2apiLoginInput,
   Sub2apiModelDescriptor,
   Sub2apiRegisterInput,
   Sub2apiProtocolProfile,
+  Sub2apiPublicSettings,
   Sub2apiStateView,
   Sub2apiTwoFactorInput,
   Sub2apiUsageSnapshot,
 } from './types.ts'
 import { Sub2apiRuntimeService } from './service.ts'
 import type { Sub2apiRuntime, Sub2apiRuntimeOptions } from './service.ts'
+import { Sub2apiHttpClient } from './http.ts'
+import { resolveSub2apiProfile, sub2apiDeploymentFingerprint } from './profile.ts'
+import type { Sub2apiProfileInput } from './profile.ts'
 import { Sub2apiLlmProvider } from './llm.ts'
 import type { Sub2apiLlmOptions } from './llm.ts'
 import { Sub2apiRemoteController } from './remote.ts'
 import { SUB2API_RECORD_KEY } from './service.ts'
+import { SUB2API_MODEL_SETTINGS_NAMESPACE, Sub2apiModelSettingsSchema } from './model-settings.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -26,7 +34,19 @@ declare module '@deepseek-ai/cordis' {
 }
 
 /** Options for the Cordis façade; the credential provider comes from the context. */
-export interface Sub2apiServiceOptions extends Omit<Sub2apiRuntimeOptions, 'credentials'> {
+export interface Sub2apiServiceOptions extends Omit<Sub2apiRuntimeOptions, 'credentials' | 'http' | 'profile' | 'deploymentFingerprint'> {
+  /** Normalized profile or plain fields accepted by a Cordis patch. */
+  readonly profile: Sub2apiProtocolProfile | Sub2apiProfileInput
+  /** Deployment fingerprint as text; the service brands it before persistence. */
+  readonly deploymentFingerprint: string
+  /** Optional prebuilt transport for embedders and protocol fixtures. */
+  readonly http?: Sub2apiHttpClient
+  /** Explicit transport limits used when the service creates the local transport. */
+  readonly httpOptions?: {
+    readonly maxResponseBytes: number
+    readonly timeoutMs: number
+    readonly maxRedirects: number
+  }
   /** Optional, fail-closed model-gateway registration. */
   readonly llm?: Sub2apiLlmOptions
 }
@@ -46,12 +66,43 @@ export class Sub2apiService extends Service implements Sub2apiRuntime {
     super(ctx, 'sub2api')
     const credentials = ctx.get('credentials')
     if (credentials === undefined) throw new Error('sub2api: credentials service unavailable')
-    const { llm: llmOptions, ...runtimeOptions } = options
-    this.runtime = new Sub2apiRuntimeService({ ...runtimeOptions, credentials })
+    const { llm: llmOptions, http: configuredHttp, httpOptions, profile: profileInput, deploymentFingerprint, ...runtimeOptions } = options
+    const profile = resolveServiceProfile(profileInput)
+    const http = configuredHttp ?? createConfiguredHttp(profile, httpOptions)
+    const settings = ctx.get('settings')
+    const modelSettingsScope = settings?.register(SUB2API_MODEL_SETTINGS_NAMESPACE, Sub2apiModelSettingsSchema)
+    const modelSettings = modelSettingsScope === undefined
+      ? runtimeOptions.modelSettings
+      : {
+        get: () => modelSettingsScope.get().modelOverrides,
+        update: (modelId: string, override: { readonly contextWindow?: number }) =>
+          modelSettingsScope.update({ modelOverrides: { [modelId]: override } }),
+      }
+    this.runtime = new Sub2apiRuntimeService({
+      ...runtimeOptions,
+      ...(modelSettings === undefined ? {} : { modelSettings }),
+      profile,
+      deploymentFingerprint: sub2apiDeploymentFingerprint(deploymentFingerprint),
+      http,
+      credentials,
+    })
+    let modelCatalogKey = JSON.stringify(null)
     ctx.effect(
-      () => this.runtime.subscribe((state) => { ctx.emit('sub2api/state-changed', state) }),
+      () => this.runtime.subscribe((state) => {
+        ctx.emit('sub2api/state-changed', state)
+        const nextModelCatalogKey = JSON.stringify(state.models ?? null)
+        if (nextModelCatalogKey === modelCatalogKey) return
+        modelCatalogKey = nextModelCatalogKey
+        ctx.emit('llm/adapters-updated')
+      }),
       'sub2api: state projection events',
     )
+    if (modelSettingsScope !== undefined) {
+      ctx.effect(
+        () => modelSettingsScope.watch(() => this.runtime.refreshModelSettings()),
+        'sub2api: model settings updates',
+      )
+    }
     if (llmOptions?.enabled === true) ctx.plugin(Sub2apiLlmProvider, llmOptions)
     ctx.plugin(Sub2apiRemoteController)
     ctx.inject(['authorization'], (authorization) => {
@@ -148,6 +199,34 @@ export class Sub2apiService extends Service implements Sub2apiRuntime {
     return this.runtime.refreshModels(signal)
   }
 
+  /** Re-apply settings changed by another settings consumer. */
+  refreshModelSettings(): void {
+    this.runtime.refreshModelSettings()
+  }
+
+  /** Persist and apply a model's context-window override. */
+  updateModelSettings(input: import('./types.ts').Sub2apiModelSettingsInput): Promise<void> {
+    return this.runtime.updateModelSettings(input)
+  }
+
+  /** Update the authenticated user's managed API Key group.
+   * @param groupId - positive server-side group identifier.
+   * @param signal - optional cancellation signal.
+   * @returns resolution after the server and durable local record agree.
+   */
+  updateManagedKeyGroup(groupId: number, signal?: AbortSignal): Promise<void> {
+    return this.runtime.updateManagedKeyGroup(groupId, signal)
+  }
+
+  /**
+   * Refresh and return named groups available to the authenticated account.
+   * @param signal - optional cancellation signal for the group request.
+   * @returns named group descriptors.
+   */
+  getAvailableGroups(signal?: AbortSignal): Promise<readonly Sub2apiGroupDescriptor[]> {
+    return this.runtime.getAvailableGroups(signal)
+  }
+
   /**
    * Refresh or return the bounded usage and balance snapshot.
    * @param signal - optional cancellation signal.
@@ -155,6 +234,15 @@ export class Sub2apiService extends Service implements Sub2apiRuntime {
    */
   getUsage(signal?: AbortSignal): Promise<Sub2apiUsageSnapshot> {
     return this.runtime.getUsage(signal)
+  }
+
+  /**
+   * Read unauthenticated deployment capability settings.
+   * @param signal - optional cancellation signal for the public-settings request.
+   * @returns public settings, or `undefined` when the profile has no endpoint.
+   */
+  getPublicSettings(signal?: AbortSignal): Promise<Sub2apiPublicSettings | undefined> {
+    return this.runtime.getPublicSettings(signal)
   }
 
   /**
@@ -202,11 +290,11 @@ function registerSub2apiAuthorizationFlow(
       const email = await session.prompt({ kind: 'text', message: 'Sub2API email address' })
       const password = await session.prompt({ kind: 'secret', message: 'Sub2API password' })
       if (session.method === 'register') {
-        const captcha = await session.prompt({
+        const verificationCode = await session.prompt({
           kind: 'text',
           message: 'Registration code (leave blank when not required)',
         })
-        await runtime.register({ email, password, ...(captcha === '' ? {} : { captcha }) }, session.signal)
+        await runtime.register({ email, password, ...(verificationCode === '' ? {} : { verificationCode }) }, session.signal)
       } else {
         await runtime.login({ email, password }, session.signal)
       }
@@ -216,4 +304,35 @@ function registerSub2apiAuthorizationFlow(
       }
     },
   })
+}
+
+function resolveServiceProfile(input: Sub2apiProtocolProfile | Sub2apiProfileInput): Sub2apiProtocolProfile {
+  if ('account' in input && 'gateway' in input) return input
+  return resolveSub2apiProfile(input)
+}
+
+function createConfiguredHttp(
+  profile: Sub2apiProtocolProfile,
+  options: Sub2apiServiceOptions['httpOptions'],
+): Sub2apiHttpClient {
+  if (options === undefined) throw new Error('sub2api: http or explicit httpOptions is required')
+  const origins = new Set([new URL(profile.accountBaseUrl).origin, new URL(profile.gatewayBaseUrl).origin])
+  return new Sub2apiHttpClient({
+    profile,
+    ...options,
+    validateDestination: async (url) => {
+      if (!origins.has(url.origin)) {
+        throw new Sub2apiError('SUB2API_BAD_REQUEST', 'Sub2API request destination is outside the configured deployment origins')
+      }
+      if (!isIpLiteral(url.hostname)) {
+        throw new Sub2apiError('SUB2API_BAD_REQUEST', 'Sub2API hostname destinations require an injected resolver and pinned transport')
+      }
+    },
+  })
+}
+
+function isIpLiteral(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/gu, '')
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/u.test(host)) return true
+  return host.includes(':') && /^[0-9a-f:]+$/iu.test(host)
 }

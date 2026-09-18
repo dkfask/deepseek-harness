@@ -58,7 +58,7 @@
         "method": "POST",
         "path": "/api/v1/keys",
         "requiredHeaders": ["authorization"],
-        "bodyKeys": ["name"]
+        "bodyKeys": ["name", "group_id"]
       },
       "response": {
         "status": 200,

@@ -3,8 +3,11 @@
 export type {
   Sub2apiAccountSnapshot,
   Sub2apiAccountSummary,
+  Sub2apiGroupDescriptor,
   Sub2apiLoginInput,
   Sub2apiModelDescriptor,
+  Sub2apiModelSettingsInput,
+  Sub2apiPublicSettings,
   Sub2apiRegisterInput,
   Sub2apiStateView,
   Sub2apiTwoFactorInput,

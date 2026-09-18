@@ -31,6 +31,22 @@ const DESKTOP_UPLOAD_CREDENTIAL_ENV_NAMES = new Set([
   'DOWNLOAD_PROD_COS_SECRET_KEY',
 ])
 
+const THUNDERUNI_RUNTIME_ENVIRONMENT = {
+  DSH_DESKTOP_BRAND: 'ThunderUni',
+  DSH_SUB2API_ENABLED: 'true',
+  DSH_SUB2API_LLM_ENABLED: 'true',
+  DSH_SUB2API_PERSIST_REFRESH_TOKEN: 'true',
+  DSH_SUB2API_TOOLS_ENABLED: 'true',
+  DSH_SUB2API_VERIFIED_TOOLS_MODELS: 'gpt-5.6-sol',
+  DSH_SUB2API_CHAT_COMPLETIONS_VERIFIED: 'true',
+  DSH_SUB2API_STREAMING_VERIFIED: 'true',
+  DSH_SUB2API_GATEWAY_AUTH_SCHEME: 'bearer',
+  DSH_SUB2API_ACCOUNT_URL: 'http://127.0.0.1:8090/api/v1',
+  DSH_SUB2API_GATEWAY_URL: 'http://127.0.0.1:8090',
+  DSH_SUB2API_CONTEXT_WINDOW: '131072',
+  DSH_SUB2API_MAX_TOKENS: '8192',
+}
+
 /** Fixed platform and architecture identifiers exposed by package scripts. */
 export type DesktopPackageTargetName = 'mac-arm64' | 'mac-x64' | 'win-x64'
 
@@ -139,6 +155,40 @@ function writeReleaseRecord(
     publicUrl: update.publicUrl,
   }, null, 2)}\n`)
   renameSync(temporaryPath, recordPath)
+}
+
+/**
+ * Resolve profile defaults that are safe to seal into a Desktop artifact.
+ * @param profile - Client branding and runtime profile.
+ * @param source - Build environment carrying deployment-specific values.
+ * @returns The environment written into packaged resources.
+ */
+export function resolveDesktopRuntimeEnvironment(
+  profile: ClientBuildProfile,
+  source: NodeJS.ProcessEnv = process.env,
+): Readonly<Record<string, string>> {
+  if (profile !== 'thunderuni') return {}
+  const groupId = source.DSH_SUB2API_MANAGED_KEY_GROUP_ID?.trim()
+  if (groupId === undefined || groupId === '') {
+    throw new Error('desktop package: ThunderUni profile requires DSH_SUB2API_MANAGED_KEY_GROUP_ID')
+  }
+  const numericGroupId = Number(groupId)
+  if (!/^\d+$/u.test(groupId) || !Number.isSafeInteger(numericGroupId) || numericGroupId <= 0) {
+    throw new Error('desktop package: DSH_SUB2API_MANAGED_KEY_GROUP_ID must be a positive integer')
+  }
+  return Object.freeze({
+    ...THUNDERUNI_RUNTIME_ENVIRONMENT,
+    DSH_SUB2API_MANAGED_KEY_GROUP_ID: groupId,
+  })
+}
+
+function writeDesktopRuntimeConfig(path: string, profile: ClientBuildProfile, source: NodeJS.ProcessEnv): void {
+  const environment = resolveDesktopRuntimeEnvironment(profile, source)
+  writeFileSync(path, `${JSON.stringify({
+    schemaVersion: 1,
+    clientProfile: profile,
+    environment,
+  }, null, 2)}\n`)
 }
 
 /**
@@ -289,6 +339,7 @@ async function main(): Promise<void> {
     ...buildEnv,
     DSH_DESKTOP_TARGET_PLATFORM: target.platform,
     DSH_DESKTOP_TARGET_ARCH: target.arch,
+    DSH_DESKTOP_CLIENT_PROFILE: invocation.profile,
   }
   const electronBuilderEnv = desktopElectronBuilderEnvironment(targetEnv, invocation.unsigned)
   for (const name of WINDOWS_SIGNING_ENV_NAMES) {
@@ -317,6 +368,7 @@ async function main(): Promise<void> {
   await runPnpm(['run', 'prepare:runtime'], targetEnv)
   await runPnpm(['run', 'prepare:packages'], targetEnv)
   await runPnpm(['run', 'prepare:dsh'], targetEnv)
+  writeDesktopRuntimeConfig(buildPaths.runtimeConfig, invocation.profile, buildEnv)
   if (invocation.prepareOnly) return
   if (target.platform === 'darwin' && !invocation.directory) {
     await runPnpm([

@@ -17,6 +17,7 @@ import {
   Sub2apiGenerationGuard,
   Sub2apiHttpClient,
   Sub2apiRuntimeService,
+  type Sub2apiModelSettingsStore,
   Sub2apiLlmProvider,
   SUB2API_RECORD_KEY,
   isSub2apiRecord,
@@ -28,9 +29,11 @@ import {
   MemorySub2apiCredentialStore,
   parseSub2apiFixture,
   parseSub2apiCompatibilityMatrix,
+  parseSub2apiTargetEvidence,
   SUB2API_LOCKED_BASELINE,
 } from '../src/index.ts'
 import compatibilityMatrix from './fixtures/compatibility-matrix-v1.json'
+import targetEvidence from './fixtures/target-local-0.2.5-v1.json'
 
 const paths = {
   accountPaths: {
@@ -40,8 +43,10 @@ const paths = {
     refresh: '/auth/refresh',
     me: '/auth/me',
     apiKeys: '/keys',
+    groupsAvailable: '/groups/available',
     usage: '/usage/dashboard/stats',
     recharge: '/billing/recharge',
+    publicSettings: '/settings/public',
   },
   gatewayPaths: { models: '/v1/models', chatCompletions: '/v1/chat/completions' },
 }
@@ -50,6 +55,11 @@ function requestUrl(input: RequestInfo | URL): string {
   if (input instanceof URL) return input.toString()
   if (typeof input === 'string') return input
   return input.url
+}
+
+function withoutRechargePath(accountPaths: typeof paths.accountPaths): Omit<typeof paths.accountPaths, 'recharge'> {
+  const { recharge: _recharge, ...rest } = accountPaths
+  return rest
 }
 
 describe('Sub2API profile', () => {
@@ -72,6 +82,7 @@ describe('Sub2API profile', () => {
 
   it('allows only exact development HTTP origins and rejects unsafe hosts', () => {
     expect(normalizeSub2apiOrigin('http://dev.example.test', ['http://dev.example.test'])).toBe('http://dev.example.test')
+    expect(normalizeSub2apiOrigin('http://127.0.0.1:8090', ['http://127.0.0.1:8090'])).toBe('http://127.0.0.1:8090')
     expect(() => normalizeSub2apiOrigin('http://dev.example.test')).toThrow(/HTTPS|exact development origin/)
     for (const value of ['https://localhost', 'https://127.0.0.1', 'https://192.168.1.10', 'https://[::1]', 'https://[::ffff:127.0.0.1]']) {
       expect(() => normalizeSub2apiOrigin(value)).toThrow(/host is not allowed/)
@@ -115,6 +126,64 @@ describe('Sub2API durable grant records', () => {
       expect(() => parseSub2apiGrantRecord(invalid)).toThrow(Sub2apiError)
     }
     expect(() => sub2apiSecret('')).toThrow(/must not be empty/)
+  })
+
+  it('accepts an exact development origin when the active profile allows it', () => {
+    const record = parseSub2apiGrantRecord({
+      ...raw,
+      deployment: { ...raw.deployment, origin: 'http://127.0.0.1:8090' },
+    }, ['http://127.0.0.1:8090'])
+    expect(record.deployment.origin).toBe('http://127.0.0.1:8090')
+  })
+})
+
+describe('Sub2API standard codec', () => {
+  it('encodes the locked registration and TOTP field names', () => {
+    const codec = createStandardSub2apiCodec()
+    expect(codec.encodeRegister({
+      email: 'user@example.test',
+      password: 'password-not-persisted',
+      verificationCode: 'verify-1',
+    })).toEqual({
+      email: 'user@example.test',
+      password: 'password-not-persisted',
+      verify_code: 'verify-1',
+    })
+    expect(codec.encodeTwoFactor({ code: '123456' }, 'temp-1')).toEqual({
+      totp_code: '123456',
+      temp_token: 'temp-1',
+    })
+  })
+
+  it('normalizes numeric and ISO API Key creation timestamps', () => {
+    const codec = createStandardSub2apiCodec()
+    const createdAt = Date.parse('2026-09-17T00:00:00.000Z')
+    expect(codec.decodeCreatedApiKey({ name: 'managed', key: 'secret', active: true, created_at: '2026-09-17T00:00:00.000Z' })).toMatchObject({ createdAt })
+    expect(codec.decodeApiKeys({ data: [{ name: 'managed', active: true, created_at: 42 }] })).toMatchObject([{ createdAt: 42 }])
+    expect(() => codec.decodeCreatedApiKey({ name: 'managed', key: 'secret', active: true, created_at: 'not-a-date' })).toThrow(/created_at/u)
+  })
+
+  it('decodes public capability settings and treats empty recharge URLs as absent', () => {
+    const codec = createStandardSub2apiCodec()
+    expect(codec.decodePublicSettings({
+      registration_enabled: false,
+      email_verify_enabled: true,
+      totp_enabled: false,
+      payment_enabled: false,
+      subscription_enabled: true,
+      payment_balance_disabled: true,
+      purchase_subscription_url: '',
+      balance_low_notify_recharge_url: 'https://billing.example.test/recharge',
+    })).toEqual({
+      registrationEnabled: false,
+      emailVerifyEnabled: true,
+      totpEnabled: false,
+      paymentEnabled: false,
+      subscriptionEnabled: true,
+      paymentBalanceDisabled: true,
+      rechargeUrl: 'https://billing.example.test/recharge',
+    })
+    expect(() => codec.decodePublicSettings({ registration_enabled: 'false' })).toThrow(Sub2apiError)
   })
 })
 
@@ -211,6 +280,70 @@ describe('Sub2API HTTP client', () => {
       credential: { kind: 'api-key', value: 'secret-not-returned' },
     })).rejects.toMatchObject({ code: 'SUB2API_RATE_LIMITED', retryAfterMs: 3_000, retryable: true })
     expect(new Headers(requestHeaders).get('x-api-key')).toBe('secret-not-returned')
+  })
+
+  it('maps the gateway balance business code when the deployment uses HTTP 403', async () => {
+    const client = new Sub2apiHttpClient({
+      profile,
+      maxResponseBytes: 1_024,
+      timeoutMs: 1_000,
+      maxRedirects: 0,
+      validateDestination: async () => {},
+      fetch: async () => new Response(JSON.stringify({
+        code: 'INSUFFICIENT_BALANCE',
+        message: 'Insufficient account balance',
+      }), { status: 403, headers: { 'content-type': 'application/json' } }),
+    })
+
+    await expect(client.request({
+      base: 'gateway',
+      path: paths.gatewayPaths.models,
+      method: 'GET',
+      credential: { kind: 'api-key', value: 'secret-not-returned' },
+    })).rejects.toMatchObject({ code: 'SUB2API_INSUFFICIENT_BALANCE', httpStatus: 403 })
+  })
+
+  it('preserves only safe compliance metadata from the administrator gate', async () => {
+    const client = new Sub2apiHttpClient({
+      profile,
+      maxResponseBytes: 1_024,
+      timeoutMs: 1_000,
+      maxRedirects: 0,
+      validateDestination: async () => {},
+      fetch: async () => new Response(JSON.stringify({
+        code: 'ADMIN_COMPLIANCE_ACK_REQUIRED',
+        message: 'do not expose this upstream message',
+        metadata: {
+          version: 'v2026.06.10',
+          document_url_zh: 'https://docs.example.test/admin.zh.md',
+          document_url_en: 'https://docs.example.test/admin.en.md',
+          ack_phrase_zh: '我已阅读、理解并同意',
+          ack_phrase_en: 'I have read and agree',
+          credential: 'must not cross the transport boundary',
+        },
+      }), { status: 423, headers: { 'content-type': 'application/json' } }),
+    })
+
+    await expect(client.request({ base: 'account', path: paths.accountPaths.me, method: 'GET' })).rejects.toMatchObject({
+      code: 'SUB2API_ADMIN_COMPLIANCE_REQUIRED',
+      httpStatus: 423,
+      compliance: {
+        version: 'v2026.06.10',
+        documentUrlZh: 'https://docs.example.test/admin.zh.md',
+        documentUrlEn: 'https://docs.example.test/admin.en.md',
+        ackPhraseZh: '我已阅读、理解并同意',
+        ackPhraseEn: 'I have read and agree',
+      },
+    })
+    try {
+      await client.request({ base: 'account', path: paths.accountPaths.me, method: 'GET' })
+    } catch (error: unknown) {
+      expect(error).toBeInstanceOf(Sub2apiError)
+      if (error instanceof Sub2apiError) {
+        expect(error.message).not.toContain('do not expose this upstream message')
+        expect(JSON.stringify(error.toSummary())).not.toContain('credential')
+      }
+    }
   })
 
   it('revalidates same-origin redirects and refuses cross-origin redirects before contact', async () => {
@@ -339,6 +472,42 @@ describe('Sub2API response envelopes', () => {
   })
 })
 
+describe('Sub2API standard deployment response fields', () => {
+  it('maps the 0.2.x account, numeric identifiers, paginated keys, and dashboard cost fields', () => {
+    const codec = createStandardSub2apiCodec()
+    expect(codec.encodeRegister({ email: 'user@example.test', password: 'password', verificationCode: 'verify-1' })).toEqual({
+      email: 'user@example.test',
+      password: 'password',
+      verify_code: 'verify-1',
+    })
+    expect(codec.encodeTwoFactor({ code: '123456' }, 'temp-token')).toEqual({
+      totp_code: '123456',
+      temp_token: 'temp-token',
+    })
+    expect(codec.decodeAccount({ id: 42, username: 'user-name', email: 'user@example.test', balance: 12.5 })).toEqual({
+      userId: '42',
+      displayName: 'user-name',
+      email: 'user@example.test',
+      balance: 12.5,
+    })
+    expect(codec.decodeAccount({ id: 42, username: '', email: 'user@example.test', balance: 12.5 })).toEqual({
+      userId: '42',
+      email: 'user@example.test',
+      balance: 12.5,
+    })
+    expect(codec.decodeApiKeys({ items: [{ id: 7, name: 'dsh:managed', status: 'active' }] })).toEqual([{
+      id: '7',
+      name: 'dsh:managed',
+      active: true,
+    }])
+    expect(codec.decodeUsage({ total_actual_cost: 1.75, total_requests: 3 }, 2_000)).toEqual({
+      used: 1.75,
+      asOf: 2_000,
+      stale: false,
+    })
+  })
+})
+
 describe('Sub2API model metadata', () => {
   it('preserves explicit endpoint, capability, capacity, and source facts', () => {
     const codec = createStandardSub2apiCodec()
@@ -418,17 +587,36 @@ describe('Sub2API versioned business fixtures', () => {
 describe('Sub2API compatibility evidence', () => {
   it('keeps the locked baseline, target evidence, and synthetic fixture status separate', () => {
     const matrix = parseSub2apiCompatibilityMatrix(compatibilityMatrix)
+    const target = parseSub2apiTargetEvidence(targetEvidence)
     expect(matrix.lockedBaseline).toBe(SUB2API_LOCKED_BASELINE)
-    expect(matrix.targetDeployment).toBe('not-provided')
+    expect(matrix.targetDeployment).toBe(target.targetDeployment)
     expect(matrix.rows.filter(row => row.priority === 'P0')).toHaveLength(19)
-    expect(matrix.rows.every(row => row.targetStatus === 'not-provided')).toBe(true)
+    const observedCapabilities = new Set(target.observations.map(observation => observation.capability))
+    expect(matrix.rows.filter(row => row.targetStatus === 'verified').map(row => row.capability).sort()).toEqual([...observedCapabilities].sort())
+    expect(matrix.rows.filter(row => row.targetStatus === 'verified')).toHaveLength(12)
+    expect(matrix.rows.filter(row => row.baselineStatus === 'verified')).toHaveLength(12)
     expect(matrix.rows.filter(row => row.priority === 'P0').every(row => row.targetEvidenceRequired)).toBe(true)
     expect(matrix.rows.find(row => row.capability === 'api-key-delete')?.targetEvidenceRequired).toBe(false)
     expect(matrix.rows.filter(row => row.fixtureStatus === 'synthetic').length).toBeGreaterThan(0)
+    expect(target.observations.find(observation => observation.capability === 'chat-completions-sse')?.response).toMatchObject({
+      contentType: 'text/event-stream',
+      streamTerminated: true,
+    })
   })
 
   it('rejects a matrix that substitutes another revision for the locked baseline', () => {
     expect(() => parseSub2apiCompatibilityMatrix({ ...compatibilityMatrix, lockedBaseline: 'other' })).toThrow(Sub2apiError)
+  })
+
+  it('rejects target evidence that repeats a capability or hides malformed response fields', () => {
+    expect(() => parseSub2apiTargetEvidence({
+      ...targetEvidence,
+      observations: [targetEvidence.observations[0], targetEvidence.observations[0]],
+    })).toThrow(/repeats capability/u)
+    expect(() => parseSub2apiTargetEvidence({
+      ...targetEvidence,
+      observations: [{ ...targetEvidence.observations[0], response: { topLevelFields: ['code', 7] } }],
+    })).toThrow(/string list/u)
   })
 })
 
@@ -448,6 +636,7 @@ describe('Sub2API Host runtime and protocol fixtures', () => {
     store = new MemorySub2apiCredentialStore(),
     now: () => number = () => 1_000,
     profile = runtimeProfile,
+    modelSettings?: Sub2apiModelSettingsStore,
   ): Sub2apiRuntimeService {
     const http = new Sub2apiHttpClient({
       profile,
@@ -463,11 +652,13 @@ describe('Sub2API Host runtime and protocol fixtures', () => {
       http,
       credentials: store,
       managedKeyName: 'harness:fixture',
-      cacheTtlMs: { account: 100, models: 100, usage: 100 },
+      managedKeyGroupId: 1,
+      cacheTtlMs: { account: 100, models: 100, groups: 100, usage: 100, publicSettings: 100 },
       refreshSkewMs: 0,
       persistRefreshToken: true,
       rechargeAllowedOrigins: ['https://account.example.test'],
       now,
+      ...(modelSettings === undefined ? {} : { modelSettings }),
     })
   }
 
@@ -476,9 +667,66 @@ describe('Sub2API Host runtime and protocol fixtures', () => {
     const runtime = runtimeFor(replay)
 
     await runtime.login({ email: 'fixture@example.test', password: 'not-part-of-fixture' })
+    expect(runtime.state().apiKey).toMatchObject({ name: 'harness:fixture', active: true, groupId: 1 })
+    expect(JSON.stringify(runtime.state())).not.toContain('fixture-api-key')
     await expect(runtime.refreshModels()).resolves.toMatchObject([{ id: 'fixture-model', displayName: 'Fixture Model' }])
     await expect(runtime.getUsage()).resolves.toMatchObject({ balance: 12.5, currency: 'USD', used: 1.25, limit: 20, stale: false })
     expect(replay.completed).toBe(true)
+  })
+
+  it('applies and persists a configured model context window', async () => {
+    const replay = new Sub2apiFixtureReplay(parseSub2apiFixture(accountFixture))
+    const overrides: Record<string, { readonly contextWindow?: number }> = {}
+    const modelSettings: Sub2apiModelSettingsStore = {
+      get: () => overrides,
+      update: async (modelId, override) => { overrides[modelId] = override },
+    }
+    const runtime = runtimeFor(replay, new MemorySub2apiCredentialStore(), () => 1_000, runtimeProfile, modelSettings)
+
+    await runtime.login({ email: 'fixture@example.test', password: 'not-part-of-fixture' })
+    await runtime.refreshModels()
+    await runtime.updateModelSettings({ modelId: 'fixture-model', contextWindow: 131_072 })
+
+    expect(overrides).toEqual({ 'fixture-model': { contextWindow: 131_072 } })
+    expect(runtime.state().models).toMatchObject([{ id: 'fixture-model', contextWindow: 131_072, source: 'configured' }])
+  })
+
+  it('reads public settings without credentials and reuses the explicit cache', async () => {
+    let publicSettingsCalls = 0
+    const transport = new Sub2apiFixtureTransport(async (request) => {
+      if (request.url.pathname.endsWith('/settings/public')) {
+        publicSettingsCalls += 1
+        expect(request.headers.has('authorization')).toBe(false)
+        return sub2apiFixtureJson({ data: {
+          registration_enabled: false,
+          payment_enabled: false,
+          payment_balance_disabled: false,
+          purchase_subscription_url: '',
+        } })
+      }
+      throw new Error(`unexpected public-settings request: ${request.method} ${request.url.pathname}`)
+    })
+    const profile = resolveSub2apiProfile({
+      version: 'public-settings-fixture',
+      accountBaseUrl: 'https://account.example.test/api/v1',
+      gatewayBaseUrl: 'https://gateway.example.test',
+      ...paths,
+      accountPaths: withoutRechargePath(paths.accountPaths),
+    })
+    const runtime = runtimeFor(transport, new MemorySub2apiCredentialStore(), () => 1_000, profile)
+
+    await expect(runtime.getPublicSettings()).resolves.toEqual({
+      registrationEnabled: false,
+      paymentEnabled: false,
+      paymentBalanceDisabled: false,
+    })
+    await expect(runtime.getPublicSettings()).resolves.toEqual({
+      registrationEnabled: false,
+      paymentEnabled: false,
+      paymentBalanceDisabled: false,
+    })
+    await expect(runtime.getRechargeUrl()).resolves.toBeUndefined()
+    expect(publicSettingsCalls).toBe(1)
   })
 
   it('replays gateway non-stream and SSE responses with usage and verified model metadata', async () => {
@@ -531,7 +779,8 @@ describe('Sub2API Host runtime and protocol fixtures', () => {
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)
     ctx.provide('sub2api', runtime)
-    new Sub2apiLlmProvider(ctx, { enabled: true })
+    const tool = { name: 'fixture_probe', description: 'Return a deterministic probe value.', parameters: { type: 'object', properties: {} } }
+    new Sub2apiLlmProvider(ctx, { enabled: true, toolsEnabled: true, verifiedToolsModels: ['fixture-chat-model'] })
     await expect(ctx.llm.listModels('sub2api')).resolves.toMatchObject([{ id: 'fixture-chat-model' }])
     await expect(ctx.llm.resolveModelInfo('sub2api', 'fixture-chat-model')).resolves.toMatchObject({
       id: 'fixture-chat-model', context: { contextWindow: 131072 },
@@ -551,11 +800,34 @@ describe('Sub2API Host runtime and protocol fixtures', () => {
       credential: { kind: 'api-key', value: credential.apiKey },
     })
     const chunks = []
-    for await (const chunk of ctx.llm.stream({ provider: 'sub2api', model: 'fixture-chat-model', messages: [] })) chunks.push(chunk)
+    for await (const chunk of ctx.llm.stream({ provider: 'sub2api', model: 'fixture-chat-model', messages: [], tools: [tool] })) chunks.push(chunk)
     expect(chunks.some(chunk => chunk.type === 'text-delta')).toBe(true)
     const gatewayRequest = replay.requests.at(-1)
     expect(gatewayRequest?.headers.get('x-api-key')).toBe('fixture-gateway-api-key')
     expect(gatewayRequest?.headers.get('authorization')).toBeNull()
+  })
+
+  it('keeps tool calls fail-closed for unknown model metadata', async () => {
+    const replay = new Sub2apiFixtureReplay(parseSub2apiFixture(gatewayFixture))
+    const runtime = runtimeFor(replay)
+    await runtime.login({ email: 'gateway@example.test', password: 'fixture-password' })
+    await runtime.refreshModels()
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    ctx.provide('sub2api', runtime)
+    new Sub2apiLlmProvider(ctx, { enabled: true, toolsEnabled: true })
+
+    const chunks: unknown[] = []
+    for await (const chunk of ctx.llm.stream({
+      provider: 'sub2api',
+      model: 'fixture-chat-model',
+      messages: [],
+      tools: [{ name: 'fixture_probe', description: 'Return a deterministic probe value.', parameters: { type: 'object', properties: {} } }],
+    })) chunks.push(chunk)
+    expect(chunks.at(-1)).toMatchObject({
+      type: 'finish',
+      reason: { kind: 'error', failure: { code: 'UNSUPPORTED_OPTION', message: 'Sub2API model "fixture-chat-model" has no verified tool support' } },
+    })
   })
 
   it('completes login, persists only the grant, and single-flights model discovery', async () => {
@@ -601,11 +873,108 @@ describe('Sub2API Host runtime and protocol fixtures', () => {
     expect(models[0]).toEqual([{ id: 'model-1', displayName: 'Model One', endpointFamily: 'unknown', supportsStreaming: 'unknown', supportsTools: 'unknown', supportsVision: 'unknown', supportsReasoning: 'unknown', supportsResponses: 'unknown', source: 'server-metadata' }])
   })
 
+  it('updates the managed key group through the authenticated user API and persists it', async () => {
+    let updateBody: unknown
+    const transport = new Sub2apiFixtureTransport(async (request) => {
+      if (request.url.pathname.endsWith('/auth/login')) return sub2apiFixtureJson({ data: { access_token: 'access-group-update' } })
+      if (request.url.pathname.endsWith('/auth/me')) return sub2apiFixtureJson({ data: { id: 'user-group-update' } })
+      if (request.url.pathname.endsWith('/keys') && request.method === 'GET') return sub2apiFixtureJson({ data: [] })
+      if (request.url.pathname.endsWith('/keys') && request.method === 'POST') {
+        return sub2apiFixtureJson({ data: { id: 'key-group-update', name: 'harness:fixture', group_id: 1, key: 'api-group-update', active: true } })
+      }
+      if (request.url.pathname.endsWith('/keys/key-group-update') && request.method === 'PUT') {
+        updateBody = request.body
+        return sub2apiFixtureJson({ data: { id: 'key-group-update', name: 'harness:fixture', group_id: 9, active: true } })
+      }
+      throw new Error(`unexpected fixture request: ${request.method} ${request.url.pathname}`)
+    })
+    const store = new MemorySub2apiCredentialStore()
+    const runtime = runtimeFor(transport, store)
+
+    await runtime.login({ email: 'user@example.test', password: 'password-not-stored' })
+    await runtime.updateManagedKeyGroup(9)
+
+    expect(updateBody).toEqual({ group_id: 9 })
+    expect(runtime.state().apiKey).toMatchObject({ id: 'key-group-update', groupId: 9 })
+    expect(await runtime.resolveGatewayCredential()).toMatchObject({ apiKey: 'api-group-update' })
+    expect(await store.readRecord(SUB2API_RECORD_KEY)).toMatchObject({
+      kind: 'grant',
+      payload: { apiKey: { id: 'key-group-update', groupId: 9 } },
+    })
+  })
+
+  it('loads named groups from the authenticated account API and caches them', async () => {
+    let groupRequests = 0
+    const transport = new Sub2apiFixtureTransport(async (request) => {
+      if (request.url.pathname.endsWith('/auth/login')) return sub2apiFixtureJson({ data: { access_token: 'access-groups' } })
+      if (request.url.pathname.endsWith('/auth/me')) return sub2apiFixtureJson({ data: { id: 'user-groups' } })
+      if (request.url.pathname.endsWith('/keys') && request.method === 'GET') return sub2apiFixtureJson({ data: [] })
+      if (request.url.pathname.endsWith('/keys') && request.method === 'POST') {
+        return sub2apiFixtureJson({ data: { id: 'key-groups', name: 'harness:fixture', group_id: 1, key: 'api-groups', active: true } })
+      }
+      if (request.url.pathname.endsWith('/groups/available')) {
+        groupRequests += 1
+        return sub2apiFixtureJson({ data: [
+          { id: 1, name: '默认分组', platform: 'openai' },
+          { id: 9, name: 'ThunderUni 编程', platform: 'openai' },
+        ] })
+      }
+      throw new Error(`unexpected fixture request: ${request.method} ${request.url.pathname}`)
+    })
+    const runtime = runtimeFor(transport)
+
+    await runtime.login({ email: 'user@example.test', password: 'password-not-stored' })
+    await expect(runtime.getAvailableGroups()).resolves.toEqual([
+      { id: 1, name: '默认分组', platform: 'openai' },
+      { id: 9, name: 'ThunderUni 编程', platform: 'openai' },
+    ])
+    await expect(runtime.getAvailableGroups()).resolves.toEqual([
+      { id: 1, name: '默认分组', platform: 'openai' },
+      { id: 9, name: 'ThunderUni 编程', platform: 'openai' },
+    ])
+    expect(groupRequests).toBe(1)
+  })
+
+  it('restores a persisted refresh-token session when a new runtime hydrates', async () => {
+    let refreshCalls = 0
+    const transport = new Sub2apiFixtureTransport(async (request) => {
+      if (request.url.pathname.endsWith('/auth/login')) {
+        return sub2apiFixtureJson({ data: { access_token: 'access-login', refresh_token: 'refresh-login', expires_in: 3_600 } })
+      }
+      if (request.url.pathname.endsWith('/auth/me')) return sub2apiFixtureJson({ data: { id: 'user-restart', email: 'restart@example.test' } })
+      if (request.url.pathname.endsWith('/keys') && request.method === 'GET') return sub2apiFixtureJson({ data: [] })
+      if (request.url.pathname.endsWith('/keys') && request.method === 'POST') {
+        return sub2apiFixtureJson({ data: { id: 'key-restart', name: 'harness:fixture', key: 'api-restart', active: true } })
+      }
+      if (request.url.pathname.endsWith('/auth/refresh')) {
+        refreshCalls += 1
+        expect(request.body).toEqual({ refresh_token: 'refresh-login' })
+        return sub2apiFixtureJson({ data: { access_token: 'access-restarted', refresh_token: 'refresh-restarted', expires_in: 3_600 } })
+      }
+      if (request.url.pathname.endsWith('/v1/models')) {
+        return sub2apiFixtureJson({ data: [{ id: 'restart-model', name: 'Restart Model' }] })
+      }
+      throw new Error(`unexpected fixture request: ${request.method} ${request.url.pathname}`)
+    })
+    const store = new MemorySub2apiCredentialStore()
+    await runtimeFor(transport, store).login({ email: 'restart@example.test', password: 'password-not-stored' })
+
+    const restarted = runtimeFor(transport, store)
+    await restarted.hydrate()
+
+    expect(refreshCalls).toBe(1)
+    expect(restarted.state()).toMatchObject({
+      status: 'authenticated',
+      account: { userId: 'user-restart', email: 'restart@example.test' },
+      models: [{ id: 'restart-model', displayName: 'Restart Model' }],
+    })
+  })
+
   it('keeps a supported 2FA challenge separate from the password and completes it', async () => {
     let twoFactorBody: unknown
     const transport = new Sub2apiFixtureTransport(async (request) => {
       if (request.url.pathname.endsWith('/auth/login')) {
-        return sub2apiFixtureJson({ data: { requires_2fa: true, two_factor_token: 'challenge-not-persisted' } })
+        return sub2apiFixtureJson({ data: { requires_2fa: true, temp_token: 'challenge-not-persisted' } })
       }
       if (request.url.pathname.endsWith('/auth/login/2fa')) {
         twoFactorBody = request.body
@@ -623,7 +992,7 @@ describe('Sub2API Host runtime and protocol fixtures', () => {
     await runtime.login({ email: 'user@example.test', password: 'password-not-stored' })
     expect(runtime.state()).toMatchObject({ status: 'two-factor-required', generation: 0 })
     await runtime.submit2FA({ code: '123456' })
-    expect(twoFactorBody).toEqual({ code: '123456', two_factor_token: 'challenge-not-persisted' })
+    expect(twoFactorBody).toEqual({ totp_code: '123456', temp_token: 'challenge-not-persisted' })
     expect(runtime.state()).toMatchObject({ status: 'authenticated', generation: 1, account: { userId: 'user-2fa' } })
   })
 
@@ -633,8 +1002,8 @@ describe('Sub2API Host runtime and protocol fixtures', () => {
       if (request.url.pathname.endsWith('/auth/me')) return sub2apiFixtureJson({ data: { id: 'user-duplicate' } })
       if (request.url.pathname.endsWith('/keys') && request.method === 'GET') {
         return sub2apiFixtureJson({ data: [
-          { id: 'key-a', name: 'harness:fixture', active: true },
-          { id: 'key-b', name: 'harness:fixture', active: true },
+          { id: 'key-a', name: 'harness:fixture', group_id: 1, active: true },
+          { id: 'key-b', name: 'harness:fixture', group_id: 1, active: true },
         ] })
       }
       throw new Error(`unexpected fixture request: ${request.method} ${request.url.pathname}`)
@@ -645,6 +1014,47 @@ describe('Sub2API Host runtime and protocol fixtures', () => {
       code: 'SUB2API_PROTOCOL_MISMATCH',
     })
     expect(transport.requests.filter(request => request.method === 'POST')).toHaveLength(1)
+    expect(runtime.state().status).toBe('authenticated')
+  })
+
+  it('does not reuse a same-named key from another gateway group', async () => {
+    let createBody: unknown
+    const transport = new Sub2apiFixtureTransport(async (request) => {
+      if (request.url.pathname.endsWith('/auth/login')) return sub2apiFixtureJson({ data: { access_token: 'access-group' } })
+      if (request.url.pathname.endsWith('/auth/me')) return sub2apiFixtureJson({ data: { id: 'user-group' } })
+      if (request.url.pathname.endsWith('/keys') && request.method === 'GET') {
+        return sub2apiFixtureJson({ data: [{ id: 'wrong-group', name: 'harness:fixture', group_id: 2, active: true }] })
+      }
+      if (request.url.pathname.endsWith('/keys') && request.method === 'POST') {
+        createBody = request.body
+        return sub2apiFixtureJson({ data: { id: 'right-group', name: 'harness:fixture', group_id: 1, key: 'api-group', active: true } })
+      }
+      throw new Error(`unexpected fixture request: ${request.method} ${request.url.pathname}`)
+    })
+    const store = new MemorySub2apiCredentialStore()
+    const runtime = runtimeFor(transport, store)
+
+    await runtime.login({ email: 'user@example.test', password: 'password-not-stored' })
+    expect(createBody).toEqual({ name: 'harness:fixture', group_id: 1 })
+    const stored = await store.readRecord(SUB2API_RECORD_KEY)
+    expect(stored).toMatchObject({ kind: 'grant', payload: { apiKey: { id: 'right-group', groupId: 1 } } })
+  })
+
+  it('rejects a newly-created key returned for another gateway group', async () => {
+    const transport = new Sub2apiFixtureTransport(async (request) => {
+      if (request.url.pathname.endsWith('/auth/login')) return sub2apiFixtureJson({ data: { access_token: 'access-wrong-created-group' } })
+      if (request.url.pathname.endsWith('/auth/me')) return sub2apiFixtureJson({ data: { id: 'user-wrong-created-group' } })
+      if (request.url.pathname.endsWith('/keys') && request.method === 'GET') return sub2apiFixtureJson({ data: [] })
+      if (request.url.pathname.endsWith('/keys') && request.method === 'POST') {
+        return sub2apiFixtureJson({ data: { id: 'wrong-created-group', name: 'harness:fixture', group_id: 2, key: 'api-wrong-group', active: true } })
+      }
+      throw new Error(`unexpected fixture request: ${request.method} ${request.url.pathname}`)
+    })
+    const runtime = runtimeFor(transport)
+
+    await expect(runtime.login({ email: 'user@example.test', password: 'password-not-stored' })).rejects.toMatchObject({
+      code: 'SUB2API_PROTOCOL_MISMATCH',
+    })
     expect(runtime.state().status).toBe('authenticated')
   })
 

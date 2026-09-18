@@ -97,6 +97,22 @@ describe('experimental workspace constraints', () => {
       '@deepseek-ai/dsh-python-runtime: dependencies.@deepseek-ai/dsh-experimental-prototype must not reference an experimental package',
     ])
   })
+
+  it('allows a standard runtime to depend on an explicit public experimental release member', () => {
+    expect(checkExperimentalDependencyIsolation([{
+      dir: 'packages/experimental/agent-team',
+      manifest: {
+        name: '@deepseek-ai/dsh-experimental-agent-team',
+        publishConfig: { access: 'public' },
+      },
+    }, {
+      dir: 'packages/bundle/base',
+      manifest: {
+        name: '@deepseek-ai/dsh-base',
+        dependencies: { '@deepseek-ai/dsh-experimental-agent-team': 'workspace:^' },
+      },
+    }])).toEqual([])
+  })
 })
 
 describe('dsh family version coherence', () => {

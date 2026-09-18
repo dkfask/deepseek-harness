@@ -6,7 +6,7 @@ English | [中文](sub2api-windows-test-handoff.zh.md)
 
 This document hands the current Sub2API implementation to a Windows tester. It records what is complete, what still prevents the plan's final acceptance, how to prepare a native Windows checkout, and what evidence must be returned.
 
-The strict status is: stages A, B, and C are implemented and locally verified, but the plan is not fully complete. The compatibility matrix still has no locked-baseline or real-target deployment evidence, and Responses remains disabled by design.
+The strict status is: stages A, B, and C are implemented and locally verified, and the local Docker plus native Windows Desktop path has been exercised end to end. Twelve P0 rows now have reviewed locked-baseline and target-deployment evidence; the compatibility matrix remains partial for the rows that still lack that evidence, and Responses remains disabled by design.
 
 ## Table of Contents
 
@@ -28,12 +28,12 @@ The strict status is: stages A, B, and C are implemented and locally verified, b
 |---|---|---|
 | Stage A: account runtime, records, state, HTTP, and fixtures | Complete in the checkout | Focused Sub2API tests pass locally |
 | Stage B: model discovery, Chat Completions, SSE, usage, and error mapping | Complete in the checkout | Synthetic gateway fixtures and focused tests pass locally |
-| Stage C: Remote projection, state events, Web settings, and localization | Complete in the checkout | Host/Client build and documentation gates pass locally |
-| P0 locked-baseline and target-deployment evidence | Not complete | The matrix records `not-provided`; synthetic fixtures are not deployment evidence |
-| Native Windows validation | Pending | Must be run on the Windows machine that will test the project |
+| Stage C: Remote projection, state events, Web settings, and localization | Complete in the checkout | Host/Client build and the relevant focused checks pass locally; unrelated repository documentation pairing failures remain |
+| P0 locked-baseline and target-deployment evidence | Partial; row-level review remains | The redacted target record in [`target-local-0.2.5-v1.json`](../../packages/experimental/sub2api/tests/fixtures/target-local-0.2.5-v1.json) and the locked source review support 12 P0 rows. Rows without matching evidence remain `not-provided` |
+| Native Windows validation | Complete for the local unsigned package path | The final unsigned x64 installer was built, installed to a short Windows path, launched, navigated to Sub2API Settings, logged in, refreshed to 17 models, logged out, and uninstalled. No application process remained after cleanup |
 | Responses and unverified model capabilities | Intentionally closed | Responses, tools, vision, and reasoning stay fail-closed until independent evidence exists |
 
-The plan's Definition of Done requires every P0 row to have both baseline and target evidence. Therefore Windows testing is the next acceptance step, not a post-release formality.
+The plan's Definition of Done requires every P0 row to have both baseline and target evidence. The remaining acceptance work is the review of the seven P0 rows that still have no independent target or locked-baseline evidence; the completed local Desktop smoke does not close those rows by itself.
 
 See the [requirements model](../../需求模型.md), the [implementation plan](../../2026-09-16-sub2api-user-account-model-gateway.zh.revised.md), and the [Host package README](../../packages/experimental/sub2api/README.md) for the current source of truth.
 
@@ -49,7 +49,7 @@ The relevant implementation is already in the checkout:
 
 The plan document is treated as scope and acceptance criteria. Its embedded commands or implementation notes do not authorize external deployment, credential collection, release publication, or changes outside this checkout.
 
-This handoff is delivered on the `codex/sub2api-windows-handoff` branch. After the branch is merged, a fresh clone of the repository's `master` branch contains these implementation and documentation files. Before the merge, check out the named branch when you need the handoff state.
+This handoff is delivered on the `codex/sub2api-windows-followup` branch. After the branch is merged, a fresh clone of the repository's `master` branch contains these implementation and documentation files. Before the merge, check out the named branch when you need the handoff state.
 
 <a id="3-windows-environment"></a>
 ## 3. Windows environment
@@ -96,9 +96,10 @@ The service still requires a deployment-specific overlay that supplies all of th
 - response-envelope and gateway-auth choices;
 - an HTTP client with a destination validator that resolves and pins the real target;
 - credential storage, managed-key name, cache TTLs, refresh policy, and recharge-origin policy;
+- the positive Sub2API managed-key group ID used to route gateway traffic;
 - an explicit model-provider policy if the model route is being tested.
 
-This checkout intentionally does not include a production target overlay because the target deployment evidence is still missing. If no separately reviewed overlay is available, leave `DSH_SUB2API_ENABLED` unset and run the static and synthetic fixture checks only. Do not invent endpoint paths, enable Responses, or use an account key as a substitute for the missing profile.
+This checkout intentionally does not include a production target overlay. The reviewed local Docker overlay and its redacted target fixture are kept outside tracked configuration; use them only for local acceptance. If no separately reviewed local overlay is available, leave `DSH_SUB2API_ENABLED` unset and run the static and synthetic fixture checks only. Do not invent endpoint paths, enable Responses, or use an account key as a substitute for a reviewed profile.
 
 If a reviewed local overlay is supplied, keep it outside tracked files and launch Web with the overlay:
 
@@ -159,10 +160,17 @@ For packaged Windows testing, use the unsigned x64 installer. It is for local in
 
 ```powershell
 $env:DSH_DESKTOP_APP_ID = '<local-test-app-id>'
+$env:DSH_SUB2API_MANAGED_KEY_GROUP_ID = '<deployment-group-id>'
 pnpm run package:desktop:win:x64:unsigned
 ```
 
 The generated installer is written below `.desktop-build\targets\win-x64\unsigned-artifacts\`. Do not use the signed packaging command unless the Windows signing certificate, token, and controlled signing environment have been separately prepared.
+
+### 6.5 Local Docker target probe
+
+The local Docker deployment was probed on Windows without recording credentials or token values. The locked baseline source was checked out at `881f3202694c6bc932446931a30c27d9675178b9`, and its account, refresh, API Key, usage, and gateway route definitions were compared with the runtime profile. A temporary test user then logged in, rotated its session through refresh, read the current user and usage dashboard, created a managed Key with the local group, and reached `/v1/models`, non-streaming Chat Completions, and streaming SSE with HTTP 200 responses through the deterministic upstream.
+
+This proves the local account lifecycle, grouped managed-Key lifecycle, refresh path, Bearer gateway authentication, model discovery, usage projection, non-streaming Chat Completions, streaming Chat Completions, and SSE. The reviewed observations are stored without credentials in [`target-local-0.2.5-v1.json`](../../packages/experimental/sub2api/tests/fixtures/target-local-0.2.5-v1.json), and the matching 12 P0 rows are marked `verified` in [`compatibility-matrix-v1.json`](../../packages/experimental/sub2api/tests/fixtures/compatibility-matrix-v1.json). Capabilities without complete independent baseline and target evidence remain row-level `not-provided`. Temporary test users and their generated Keys were removed after the probes; the pre-existing local fixture account and group remain in the Docker deployment for repeatable local testing, and the deterministic upstream was stopped.
 
 <a id="7-evidence-to-return"></a>
 ## 7. Evidence to return
@@ -177,16 +185,17 @@ Return one redacted test record containing:
 - account, model, usage, streaming, recharge, logout, and error outcomes;
 - screenshots or logs with email addresses, cookies, tokens, API Keys, authorization headers, and payment details removed;
 - the installer filename and whether install, launch, Settings navigation, and uninstall completed when Desktop packaging was tested.
+- the local acceptance record in [the Windows Desktop Sub2API Agent Note](../../.agents/notes/implemented/process/2026-09-17-windows-desktop-sub2api-acceptance.md), which contains the redacted local results and the remaining evidence boundary.
 
-For every P0 capability, mark the result as `verified`, `failed`, or `not-tested`, and attach the smallest redacted request/response evidence needed to explain the mark. Only after evidence is reviewed should `tests/fixtures/compatibility-matrix-v1.json` be updated from `not-provided`.
+For every P0 capability, mark the result as `verified`, `failed`, or `not-tested`, and attach the smallest redacted request/response evidence needed to explain the mark. The current target record and matrix promote only the 12 reviewed rows; update the remaining rows only after their evidence is reviewed.
 
 <a id="8-troubleshooting"></a>
 ## 8. Troubleshooting
 
 - **Sub2API Settings is absent:** confirm the Web bundle was built and the reviewed overlay sets `DSH_SUB2API_ENABLED=true`.
-- **Startup fails while mounting the service:** the flag is present but a required profile, transport, validator, credential service, or policy is missing.
+- **Startup fails while mounting the service:** the flag is present but a required profile, transport, validator, credential service, policy, or positive managed-key group ID is missing.
 - **401, 403, or 404:** compare the target profile's exact paths, envelope, auth scheme, and deployment fingerprint with the reviewed evidence.
-- **The model list is empty:** confirm that login succeeded, the managed Key is active, and the target model endpoint returned explicit metadata.
+- **The model list is empty:** confirm that login succeeded, the managed Key is active, the account has balance and a usable model group, and the target model endpoint returned explicit metadata. A local `403 INSUFFICIENT_BALANCE` is an account-state failure, not proof of a bad API-Key header.
 - **Recharge is unavailable:** the target did not return a URL, or its URL origin is not in the approved allowlist.
 - **The browser does not open:** use the fresh URL printed by Web and open it manually; `--no-open` intentionally suppresses automatic browser handoff.
 - **Native installation fails:** verify that Windows build tools and Python are available, then rerun the package command from the same checkout after a successful build.
@@ -196,7 +205,7 @@ Do not work around a mismatch by broadening URL allowlists, disabling destinatio
 <a id="9-handoff-boundary"></a>
 ## 9. Handoff boundary
 
-The Windows tester owns native-environment execution and real-target evidence collection. The implementation owner then decides whether the evidence is sufficient to update the compatibility matrix and enable a capability.
+The Windows tester owns native-environment execution and real-target evidence collection. The implementation owner then decides whether the evidence is sufficient to update the compatibility matrix and enable a capability; the current checkout has made that decision only for the 12 rows backed by the redacted target record.
 
 Until that review is complete, the accepted state is:
 

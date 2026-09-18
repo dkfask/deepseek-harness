@@ -157,6 +157,11 @@ function keyConfiguredOf(row: ProviderRow): boolean {
     : row.derivedCredential?.configured === true
 }
 
+/** Whether a live provider is owned by the deployment rather than settings. */
+export function isStandaloneProvider(row: ProviderRow): boolean {
+  return row.entry.active && row.entry.settingsNs === '' && row.entry.settingsPath.length === 0
+}
+
 function targetOf(row: ProviderRow): EditorTarget {
   const managedRef = deriveKeyRef(row.entry.provider)
   const credentialRef = row.apiKeyEnv === managedRef
@@ -288,9 +293,13 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
 
   // One fact decides both first-run postures on this page and the onboarding
   // step: whether the user already has a provider to talk to.
-  const anyUsable = state.rows.some(providerUsable)
-  const configured = state.rows.filter(row => row.configured)
-  const configurable = state.rows.filter(row => state.namespaces.has(row.entry.settingsNs))
+  const managedSub2api = state.rows.some(row => row.entry.provider === 'sub2api' && isStandaloneProvider(row))
+  const modelRows = managedSub2api
+    ? state.rows.filter(row => row.entry.provider !== 'deepseek-official')
+    : state.rows
+  const anyUsable = modelRows.some(providerUsable)
+  const visible = modelRows.filter(row => row.configured || isStandaloneProvider(row))
+  const configurable = modelRows.filter(row => state.namespaces.has(row.entry.settingsNs))
   const addable = configurable.filter(row => !row.configured)
   const addTarget = adding ? editing : undefined
   const addNamespace = addTarget === undefined ? undefined : state.namespaces.get(addTarget.settingsNs)
@@ -318,17 +327,19 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
           </p>
         )}
       <ul className={styles['rows']}>
-        {configured.map((row) => {
+        {visible.map((row) => {
           const target = targetOf(row)
           const namespace = state.namespaces.get(target.settingsNs)
-          /* v8 ignore next -- the join marks a row configured only when its namespace resolved */
-          if (namespace === undefined) return null
+          const standalone = isStandaloneProvider(row)
+          /* v8 ignore next -- configured rows always have their settings namespace */
+          if (!standalone && namespace === undefined) return null
           const error = row.entry.error === undefined
             ? null
             : <p role="alert" className={styles['error']}>{row.entry.error}</p>
-          if (needsSetup(row, anyUsable) && !dismissedSetup.has(row.entry.provider)) {
+          if (!standalone && needsSetup(row, anyUsable) && !dismissedSetup.has(row.entry.provider)) {
             // First-run posture: the provider exists but has no key — the
             // setup card IS its presence on the page, until the user closes it.
+            if (namespace === undefined) return null
             return (
               <li key={row.entry.provider} className={styles['setupCard']}>
                 {error}
@@ -385,7 +396,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                       )
                       : null}
                 </span>
-                <span className={styles['rowActions']}>
+                {!standalone && <span className={styles['rowActions']}>
                   <button
                     type="button"
                     className={styles['secondaryButton']}
@@ -419,7 +430,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                       </button>
                     )
                     : null}
-                </span>
+                </span>}
               </div>
               {error}
               {renderSlot(
@@ -427,7 +438,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                 { provider: row.entry, configured: row.configured, keyConfigured: keyConfiguredOf(row) },
                 { entryKey: row.entry.settingsNs },
               )}
-              {open
+              {open && namespace !== undefined
                 ? renderProviderEditor({
                   target,
                   namespace,

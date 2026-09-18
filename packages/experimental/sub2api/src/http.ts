@@ -1,12 +1,12 @@
 import { Sub2apiError } from './errors.ts'
 import { sub2apiUrl } from './profile.ts'
-import type { Sub2apiProtocolProfile } from './types.ts'
+import type { Sub2apiComplianceRequirement, Sub2apiProtocolProfile } from './types.ts'
 
 /** The two URL bases owned by the Sub2API HTTP client. */
 export type Sub2apiHttpBase = 'account' | 'gateway'
 
 /** JSON request methods used by the account and gateway protocols. */
-export type Sub2apiHttpMethod = 'DELETE' | 'GET' | 'PATCH' | 'POST'
+export type Sub2apiHttpMethod = 'DELETE' | 'GET' | 'PATCH' | 'POST' | 'PUT'
 
 /** A credential that may be attached to exactly one protocol plane. */
 export type Sub2apiHttpCredential =
@@ -130,8 +130,8 @@ export class Sub2apiHttpClient {
 
         if (response.status < 200 || response.status >= 300) {
           const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'))
-          await cancelBody(response)
-          throw mapHttpStatus(request, response.status, retryAfterMs)
+          const body = await readBoundedBody(response, this.options.maxResponseBytes, deadline.signal)
+          throw mapHttpStatus(request, response.status, retryAfterMs, parseErrorDescriptor(body))
         }
 
         return {
@@ -300,10 +300,30 @@ async function cancelBody(response: Response): Promise<void> {
   await response.body?.cancel().catch(() => undefined)
 }
 
-function mapHttpStatus(request: Sub2apiHttpRequest, status: number, retryAfterMs: number | undefined): Sub2apiError {
+interface Sub2apiErrorDescriptor {
+  readonly code?: string
+  readonly compliance?: Sub2apiComplianceRequirement
+}
+
+function mapHttpStatus(
+  request: Sub2apiHttpRequest,
+  status: number,
+  retryAfterMs: number | undefined,
+  descriptor: Sub2apiErrorDescriptor | undefined,
+): Sub2apiError {
   const retryOptions = retryAfterMs === undefined
     ? { httpStatus: status }
     : { httpStatus: status, retryAfterMs }
+  if (status === 423 && descriptor?.code === 'ADMIN_COMPLIANCE_ACK_REQUIRED') {
+    return new Sub2apiError(
+      'SUB2API_ADMIN_COMPLIANCE_REQUIRED',
+      'Sub2API administrator compliance acknowledgement is required before this operation can continue',
+      { ...retryOptions, ...(descriptor.compliance === undefined ? {} : { compliance: descriptor.compliance }) },
+    )
+  }
+  if (descriptor?.code === 'INSUFFICIENT_BALANCE') {
+    return new Sub2apiError('SUB2API_INSUFFICIENT_BALANCE', 'Sub2API account balance is insufficient', retryOptions)
+  }
   if (status === 401) {
     return new Sub2apiError(
       request.base === 'gateway' ? 'SUB2API_KEY_INVALID' : 'SUB2API_REAUTH_REQUIRED',
@@ -320,6 +340,45 @@ function mapHttpStatus(request: Sub2apiHttpRequest, status: number, retryAfterMs
   if (status === 429) return new Sub2apiError('SUB2API_RATE_LIMITED', 'Sub2API rate limit reached', { ...retryOptions, retryable: true })
   if (status >= 500) return new Sub2apiError('SUB2API_SERVICE_UNAVAILABLE', 'Sub2API service is unavailable', { ...retryOptions, retryable: true })
   return new Sub2apiError('SUB2API_BAD_REQUEST', `Sub2API rejected the request with HTTP ${status}`, retryOptions)
+}
+
+function parseErrorDescriptor(body: string): Sub2apiErrorDescriptor | undefined {
+  if (body.trim() === '') return undefined
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(body)
+  } catch {
+    return undefined
+  }
+  if (!isRecord(parsed)) return undefined
+  const code = stringField(parsed, 'code')
+  if (code !== 'ADMIN_COMPLIANCE_ACK_REQUIRED') return code === undefined ? undefined : { code }
+  const metadata = parsed.metadata
+  if (!isRecord(metadata)) return { code }
+  const version = stringField(metadata, 'version')
+  const documentUrlZh = stringField(metadata, 'document_url_zh')
+  const documentUrlEn = stringField(metadata, 'document_url_en')
+  const ackPhraseZh = stringField(metadata, 'ack_phrase_zh')
+  const ackPhraseEn = stringField(metadata, 'ack_phrase_en')
+  const compliance: Sub2apiComplianceRequirement = {
+    ...(version === undefined ? {} : { version }),
+    ...(documentUrlZh === undefined ? {} : { documentUrlZh }),
+    ...(documentUrlEn === undefined ? {} : { documentUrlEn }),
+    ...(ackPhraseZh === undefined ? {} : { ackPhraseZh }),
+    ...(ackPhraseEn === undefined ? {} : { ackPhraseEn }),
+  }
+  return Object.keys(compliance).length === 0 ? { code } : { code, compliance }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function stringField(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key]
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed === '' || trimmed.length > 2_048 ? undefined : trimmed
 }
 
 function parseRetryAfter(value: string | null): number | undefined {

@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   resolveDesktopAppId,
+  resolveDesktopClientProfile,
   resolveMacOSNotarizationEnvironment,
   resolveMacOSSigningEnvironment,
 } from './scripts/desktop-release-environment.mjs'
@@ -27,6 +28,7 @@ export function createElectronBuilderConfig(
   hostArch = process.arch,
 ) {
   const appId = resolveDesktopAppId(env)
+  const clientProfile = resolveDesktopClientProfile(env)
   const targetPlatform = env.DSH_DESKTOP_TARGET_PLATFORM
   const resolvedPlatform = targetPlatform ?? hostPlatform
   const resolvedArch = env.DSH_DESKTOP_TARGET_ARCH ?? hostArch
@@ -52,10 +54,16 @@ export function createElectronBuilderConfig(
   }
   const update = unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
   const buildPaths = desktopTargetBuildPaths(resolveDesktopBuildTarget(env, hostPlatform, hostArch))
+  const productName = clientProfile === 'thunderuni' ? 'ThunderUni' : 'DeepSeek Harness'
+  const brandIcon = clientProfile === 'thunderuni'
+    ? join(fileURLToPath(new URL('../..', import.meta.url)), 'packages/client/ui-brand-thunderuni/assets/thunderuni-ai-logo.svg')
+    : undefined
   return {
     appId,
-    productName: 'DeepSeek Harness',
-    artifactName: 'deepseek-harness-${version}-${os}-${arch}.${ext}',
+    productName,
+    artifactName: clientProfile === 'thunderuni'
+      ? 'thunderuni-${version}-${os}-${arch}.${ext}'
+      : 'deepseek-harness-${version}-${os}-${arch}.${ext}',
     directories: { output: unsigned ? join(buildPaths.root, 'unsigned-artifacts') : buildPaths.artifacts },
     asar: true,
     files: [
@@ -69,8 +77,10 @@ export function createElectronBuilderConfig(
       { from: buildPaths.dsh, to: 'dsh' },
       // electron-builder excludes a source directory's root node_modules.
       { from: join(buildPaths.dsh, 'node_modules'), to: 'dsh/node_modules' },
+      { from: buildPaths.runtimeConfig, to: 'desktop-runtime-config.json' },
     ],
     mac: {
+      icon: brandIcon,
       category: 'public.app-category.developer-tools',
       identity: macOSSigning?.signingIdentity,
       forceCodeSigning: true,
@@ -105,6 +115,7 @@ export function createElectronBuilderConfig(
       )
     },
     win: {
+      icon: brandIcon,
       forceCodeSigning: !unsigned,
       signtoolOptions: {
         sign: windowsSigner,

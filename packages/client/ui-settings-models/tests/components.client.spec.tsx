@@ -307,6 +307,30 @@ async function mountDeepSeekCard(overrides: Parameters<typeof scriptedFace>[0] =
 }
 
 describe('ModelsSection', () => {
+  it('renders an active system provider without a settings namespace', async () => {
+    const scripted = scriptedFace()
+    scripted.face.llm.listProviders.mockResolvedValue(remoteOk([
+      { id: 'sub2api', name: 'ThunderUni' },
+    ]))
+    const { renderSlot } = await mountFace(scripted)
+
+    expect(screen.getByText('ThunderUni')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Edit .*sub2api/u })).toBeNull()
+    expect(cardSeatCalls(renderSlot)).toContainEqual(['sub2api', false, false, ''])
+  })
+
+  it('removes the default DeepSeek route when the deployment owns the model directory', async () => {
+    const scripted = scriptedFace()
+    scripted.face.llm.listProviders.mockResolvedValue(remoteOk([
+      { id: 'deepseek-official', name: 'DeepSeek' },
+      { id: 'sub2api', name: 'ThunderUni' },
+    ]))
+    await mountFace(scripted)
+
+    expect(screen.queryByText('DeepSeek', { exact: true })).toBeNull()
+    expect(screen.getByText('ThunderUni')).toBeTruthy()
+  })
+
   it('hides both add actions when their settings namespaces are absent', async () => {
     const scripted = scriptedFace()
     scripted.face.settings.describe.mockResolvedValue(remoteOk({ writable: true, hasDocument: false, namespaces: [] }))

@@ -52,9 +52,10 @@ describe('desktop macOS release signature', () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     const config = createElectronBuilderConfig(RELEASE_ENVIRONMENT, 'darwin', 'arm64')
     expect(portablePath(config.directories.output)).toContain('/.desktop-build/targets/mac-arm64/artifacts')
-    expect(config.extraResources).toHaveLength(3)
+    expect(config.extraResources).toHaveLength(4)
     expect(config.extraResources[0]?.to).toBe('runtime')
     expect(config.extraResources[1]?.to).toBe('dsh')
+    expect(config.extraResources[3]?.to).toBe('desktop-runtime-config.json')
     expect(portablePath(config.extraResources[0]?.from ?? '')).toContain('/.desktop-build/targets/mac-arm64/runtime')
     expect(portablePath(config.extraResources[1]?.from ?? '')).toContain('/.desktop-build/targets/mac-arm64/dsh')
     expect(config).toMatchObject({
@@ -75,6 +76,16 @@ describe('desktop macOS release signature', () => {
       }],
     })
     expect(typeof config.artifactBuildCompleted).toBe('function')
+  })
+
+  it('uses the ThunderUni product identity for the ThunderUni client profile', async () => {
+    const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
+    const config = createElectronBuilderConfig({
+      ...RELEASE_ENVIRONMENT,
+      DSH_DESKTOP_CLIENT_PROFILE: 'thunderuni',
+    }, 'darwin', 'arm64')
+    expect(config.productName).toBe('ThunderUni')
+    expect(config.artifactName).toBe('thunderuni-${version}-${os}-${arch}.${ext}')
   })
 
   it('seals PAK resources with their enclosing bundle while signing executable code', async () => {
@@ -101,7 +112,7 @@ describe('desktop macOS release signature', () => {
       const destination = join(root, 'resources')
       runtimeFixture(source)
       const sourceRoot = config.extraResources[1].from
-      const matchers = config.extraResources.slice(1).map(entry => new FileMatcher(
+      const matchers = config.extraResources.slice(1, 3).map(entry => new FileMatcher(
         join(source, relative(sourceRoot, entry.from)), join(destination, entry.to), value => value,
       ))
       await copyFiles(matchers.slice(0, 1))

@@ -385,23 +385,30 @@
   padding-left: 0;
 }
 
-/* Footer seats: additive actions stack above Settings. Each occupant owns its
-   button geometry and hover chrome. */
+/* Footer seats: additive actions share a row with Settings. Each occupant owns
+   its button geometry and hover chrome. */
 .footArea {
   flex: none;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
 }
 
 .settingsArea,
 .footerActions {
   flex: none;
   min-width: 0;
-  width: 100%;
 }
 
 .footerActions {
+  flex: 1;
+  width: auto;
   display: flex;
+}
+
+.settingsArea {
+  width: auto;
 }
 
 .collapsed .footArea {

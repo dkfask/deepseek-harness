@@ -20,7 +20,8 @@
     "src/fixtures.ts",
     "src/errors.ts",
     "src/llm.ts",
-    "src/compatibility.ts"
+    "src/compatibility.ts",
+    "src/model-settings.ts"
   ],
   "references": [
     { "path": "../../../vendor/cordis" },

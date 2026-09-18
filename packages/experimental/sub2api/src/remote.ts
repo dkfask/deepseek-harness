@@ -6,8 +6,11 @@ import { Sub2apiError } from './errors.ts'
 import type { Sub2apiRuntime } from './service.ts'
 import type {
   Sub2apiAccountSnapshot,
+  Sub2apiGroupDescriptor,
   Sub2apiLoginInput,
   Sub2apiModelDescriptor,
+  Sub2apiModelSettingsInput,
+  Sub2apiPublicSettings,
   Sub2apiRegisterInput,
   Sub2apiStateView,
   Sub2apiTwoFactorInput,
@@ -27,7 +30,8 @@ export class Sub2apiRemoteController extends TypertRemoteService {
    * @returns Current account state.
    */
   @Remote('getState')
-  getState(): Sub2apiStateView {
+  async getState(): Promise<Sub2apiStateView> {
+    await this.runtime().hydrate()
     return this.runtime().state()
   }
 
@@ -91,6 +95,33 @@ export class Sub2apiRemoteController extends TypertRemoteService {
     return this.run(() => this.runtime().refreshModels(signal))
   }
 
+  /** Save a model's context-window setting and return the updated state. */
+  @Remote('updateModelSettings')
+  async updateModelSettings(input: Sub2apiModelSettingsInput): Promise<Sub2apiStateView> {
+    await this.run(() => this.runtime().updateModelSettings(input))
+    return this.runtime().state()
+  }
+
+  /** Return named groups available to the authenticated account.
+   * @param signal - Cancellation signal for the group request.
+   * @returns Named group descriptors without account secrets.
+   */
+  @Remote('getAvailableGroups')
+  getAvailableGroups(signal: AbortSignal): Promise<readonly Sub2apiGroupDescriptor[]> {
+    return this.run(() => this.runtime().getAvailableGroups(signal))
+  }
+
+  /** Update the authenticated user's managed API Key group.
+   * @param groupId - positive server-side group identifier.
+   * @param signal - cancellation signal for the account request.
+   * @returns Updated account state.
+   */
+  @Remote('updateManagedKeyGroup')
+  async updateManagedKeyGroup(groupId: number, signal: AbortSignal): Promise<Sub2apiStateView> {
+    await this.run(() => this.runtime().updateManagedKeyGroup(groupId, signal))
+    return this.runtime().state()
+  }
+
   /** Refresh bounded usage and balance data.
    * @param signal - Cancellation signal for the usage request.
    * @returns Refreshed usage snapshot.
@@ -98,6 +129,15 @@ export class Sub2apiRemoteController extends TypertRemoteService {
   @Remote('getUsage')
   getUsage(signal: AbortSignal): Promise<Sub2apiUsageSnapshot> {
     return this.run(() => this.runtime().getUsage(signal))
+  }
+
+  /** Read unauthenticated deployment capability settings.
+   * @param signal - Cancellation signal for the public-settings request.
+   * @returns Public settings, or `undefined` when the profile has no endpoint.
+   */
+  @Remote('getPublicSettings')
+  getPublicSettings(signal: AbortSignal): Promise<Sub2apiPublicSettings | undefined> {
+    return this.run(() => this.runtime().getPublicSettings(signal))
   }
 
   /** Return a profile-approved recharge URL.
@@ -130,6 +170,7 @@ function sub2apiRemoteError(error: unknown): RemoteError {
       retryable: error.retryable,
       ...(error.httpStatus === undefined ? {} : { httpStatus: error.httpStatus }),
       ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
+      ...(error.compliance === undefined ? {} : { compliance: error.compliance }),
     })
   }
   return new RemoteError('sub2api/failed', 'Sub2API operation failed', {

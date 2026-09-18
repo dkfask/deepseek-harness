@@ -87,7 +87,7 @@ pnpm --filter @deepseek-ai/dsh-desktop run package:mac:arm64 -- --profile thunde
 pnpm --filter @deepseek-ai/dsh-desktop run package:dir -- --profile thunderuni
 ```
 
-Desktop 用户的运行时 profile 负责已安装插件，不负责 Web 品牌。`prepare:dsh` 不会重新构建 Web 前端，已经准备或打包的应用也不会随着工作区编辑而变化；要改变内嵌客户端产物，必须重新构建目标。这个客户端品牌变更不会改动 Electron 壳的产品名和安装包身份，它们仍是 `DeepSeek Harness`。
+Desktop 用户的运行时 profile 负责已安装插件，不负责 Web 品牌。`prepare:dsh` 不会重新构建 Web 前端，已经准备或打包的应用也不会随着工作区编辑而变化；要改变内嵌客户端产物，必须重新构建目标。`official` 安装包保留 `DeepSeek Harness` 壳品牌；`thunderuni` 安装包使用 `ThunderUni` 壳品牌，并携带一个不可变的运行时默认配置，在 `http://127.0.0.1:8090` 开启本地 Sub2API 接入；启动时环境变量仍然优先。ThunderUni 会把 Sub2API refresh token 保存到本机凭据存储，并在 Host 启动时自动恢复会话，不会保存账户密码；退出登录会删除这条记录。
 
 ```sh
 pnpm run package:desktop:mac:arm64
@@ -195,7 +195,7 @@ pnpm run prepare:desktop
 
 这条诊断命令是另一种停止位置，并非两条命令构建流程的前半段。之后执行 `package:desktop*` 时仍会重新完成正式构建与准备，避免使用陈旧的 dsh 包、运行时文件或 dsh 内容。
 
-每条打包命令都会构建仓库，打包以 dsh 和私有 Desktop Host 为根的第一方生产依赖闭包，并准备目标专用的 Node 与 pnpm 可执行文件。`prepare:dsh` 在构建时安装一次生产依赖图，把物化包复制到 `extraResources/dsh`，移除包管理器元数据，并生成包含共享包版本和最终文件哈希的 `desktop-runtime.json`。在 macOS 上，它先签名并验证原生文件，再生成清单；electron-builder 不对已签名的此目录重复进行嵌套签名。资源映射明确包含默认根目录过滤器会忽略的 `dsh/node_modules`；复制后的清单在签名前及签名后分别验证。签名安装包、公证、已安装应用升级和各目标原生模块的验收需要发布环境。
+每条打包命令都会构建仓库，打包以 dsh 和私有 Desktop Host 为根的第一方生产依赖闭包，并准备目标专用的 Node 与 pnpm 可执行文件。`prepare:dsh` 在构建时安装一次生产依赖图，把物化包复制到 `extraResources/dsh`，移除包管理器元数据，并生成包含共享包版本和最终文件哈希的 `desktop-runtime.json`。打包命令还会生成 `desktop-runtime-config.json`，其中只保存 ThunderUni 的 Sub2API 开关、本地端点等非敏感 profile 默认值。在 macOS 上，它先签名并验证原生文件，再生成清单；electron-builder 不对已签名的此目录重复进行嵌套签名。资源映射明确包含默认根目录过滤器会忽略的 `dsh/node_modules`；复制后的清单在签名前及签名后分别验证。签名安装包、公证、已安装应用升级和各目标原生模块的验收需要发布环境。
 
 未压缩产物包含 Electron、物化后的 dsh 生产依赖树、上游 Node.js 与 pnpm，以及壳应用。安装包大小与文件系统占用不同；发布验收需要测量两者，以及 profile 插件存储和首次启动耗时。此布局用更多应用内文件换取消除用户机器上的核心包安装过程。
 

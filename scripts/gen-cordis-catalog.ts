@@ -773,6 +773,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   Sub2apiAccountSnapshot: 'Host account refresh result is owned by packages/experimental/sub2api/README.md',
   Sub2apiModelDescriptor: 'Host model metadata is owned by packages/experimental/sub2api/README.md',
   Sub2apiUsageSnapshot: 'Host usage projection is owned by packages/experimental/sub2api/README.md',
+  Sub2apiPublicSettings: 'Host deployment capability settings are owned by packages/experimental/sub2api/README.md',
   Sub2apiGatewayCredential: 'Host-only gateway credential is owned by packages/experimental/sub2api/README.md',
   'globalThis.fetch': 'standard Fetch API callable owned by the runtime platform',
   WorkspaceFileScope: 'Host workspace file lookup contract is owned by packages/api/workspace-files/README.md',

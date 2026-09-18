@@ -17,16 +17,18 @@ import { DesktopProjectManager, type DesktopProjectHooks } from './project-manag
 import { DesktopHostProcess } from './host-process.ts'
 import { DesktopBackendController, type DesktopBackendState } from './backend-controller.ts'
 import { DESKTOP_IPC, type DesktopUpdateState } from './ipc.ts'
-import { formatDesktopMessage, resolveDesktopLocale } from './locale.ts'
+import { formatDesktopMessage, resolveDesktopLocale, type DesktopBrand } from './locale.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { desktopErrorState } from './startup-error.ts'
 import { startupFailureDocument } from './startup-document.ts'
+import { mergeDesktopRuntimeEnvironment, readDesktopRuntimeEnvironment } from './runtime-config.ts'
 
 const SCHEME = 'dsh-app'
 let focusPrimaryWindow = (): void => {}
 type RecoveryAction = 'restart' | 'plugins' | 'reset'
 let profileRecoveryAvailable = (): boolean => false
+let desktopBrand: DesktopBrand = 'official'
 const emergencyPages = new WeakMap<BrowserWindow, { url: string; message: string; busy: boolean }>()
 let recoverApplication = (action: RecoveryAction): Promise<void> => {
   if (action !== 'restart') return Promise.reject(new Error('Desktop recovery could not initialize; reinstall the application'))
@@ -36,7 +38,7 @@ let recoverApplication = (action: RecoveryAction): Promise<void> => {
 }
 
 async function showEmergencyDocument(window: BrowserWindow, message: string): Promise<void> {
-  const document = startupFailureDocument(resolveDesktopLocale(app.getLocale()), message, profileRecoveryAvailable())
+  const document = startupFailureDocument(resolveDesktopLocale(app.getLocale(), desktopBrand), message, profileRecoveryAvailable())
   const url = `data:text/html;charset=utf-8,${encodeURIComponent(document)}`
   emergencyPages.set(window, { url, message, busy: false })
   await window.loadURL(url)
@@ -149,6 +151,11 @@ async function serveShellAsset(request: Request): Promise<Response> {
 
 async function main(): Promise<void> {
   const resources = runtimeResources()
+  const hostEnvironment = mergeDesktopRuntimeEnvironment(
+    await readDesktopRuntimeEnvironment(app.isPackaged, process.resourcesPath),
+    process.env,
+  )
+  desktopBrand = hostEnvironment.DSH_DESKTOP_BRAND === 'ThunderUni' ? 'thunderuni' : 'official'
   const paths = resolveDesktopPaths()
   const development = app.isPackaged ? undefined : join(app.getAppPath(), '.desktop-build', 'development', 'project')
   const activeProject = development ?? paths.profile
@@ -161,7 +168,7 @@ async function main(): Promise<void> {
   let pluginWindow: BrowserWindow | undefined
   let shellInstallerOwnsQuit = false
   let updateState: DesktopUpdateState = { phase: 'idle' }
-  const locale = resolveDesktopLocale(app.getLocale())
+  const locale = resolveDesktopLocale(app.getLocale(), desktopBrand)
   const messages = locale.messages
   const appPreload = fileURLToPath(new URL('./preload-app.cjs', import.meta.url))
   const managementPreload = fileURLToPath(new URL('./preload.cjs', import.meta.url))
@@ -204,7 +211,7 @@ async function main(): Promise<void> {
     if (development === undefined) manager.assertProfileRuntime(activeProject)
     const hostInspectPort = developmentHostInspectPort(development !== undefined)
     const host = new DesktopHostProcess(resources.node, development ?? resources.dsh, activeProject,
-      hostInspectPort, process.env, onFailure)
+      hostInspectPort, hostEnvironment, onFailure)
     return {
       start: () => host.start(),
       stop: () => host.stop(),
@@ -493,9 +500,7 @@ async function main(): Promise<void> {
   mainWindow = createMainWindow()
   await reconcileBackend().catch(() => undefined)
   // Window lifecycle callbacks run while backend startup is pending.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (quitting) return
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (mainWindow !== undefined && development !== undefined && process.env.DSH_DESKTOP_OPEN_DEVTOOLS !== '0') {
     mainWindow.webContents.openDevTools({ mode: 'detach' })
   }
